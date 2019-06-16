@@ -59,9 +59,9 @@
 //   To get a yellow dot: Column driven by ULN2803 and Row driven by UDN2981
 
 //#define DEBUG
-//#define GOL
+#define GOL
 //#define SNAKE
-#define TETRIS
+//#define TETRIS
 //#define NETWORK
 
 // Network function example QR code
@@ -74,7 +74,6 @@
 #ifdef TETRIS
 
 #include "tetris.h"
-
 
 enum key_state {NONE, JOY_UP, JOY_DOWN, JOY_LEFT, JOY_RIGHT, JOY_PRESSED};
 enum key_state key = NONE, prev_key = NONE;
@@ -211,6 +210,82 @@ void flipdot(uint16_t x, uint16_t y, bool color) {
 }
 
 
+void fullupdate() {
+  // current_state[COLS][ROWS];
+  // next_state[COLS][ROWS];
+  // Only works on two panels stacked on top of each other!
+
+  for (uint8_t x = 0; x < 32; x++) {
+    for (uint8_t y = 0; y < 16; y++) {
+
+      if ((current_state[x][y] != next_state[x][y]) || (current_state[x][y + 16] != next_state[x][y + 16])) {
+
+        // Determine which drivers we want to speak to
+        byte columndriveraddress = 0x40 + (x / 8);
+        byte rowdriveraddress    = 0x60 + (y / 8);
+        byte column2driveraddress = 0x44 + (x / 8);
+        byte row2driveraddress    = 0x62 + (y / 8);
+
+        // Now we determine what column and row we're on (%8) and determine which register matches
+        // If color is HIGH then we need the column to be at positive rail and row at gnd-rail.
+        // If color is LOW then we need the row to be at positive rail and column at gnd-rail.
+        // This is done in hardware by using the first 8 outputs of the chip for the gnd-rail and the second 8 for the positive rail.
+        byte column = x % 8;
+
+        byte columnregisteroffset = (next_state[x][y]) ? 0x07 : 0x27;
+        byte column2registeroffset = (next_state[x][y + 16]) ? 0x07 : 0x27;
+
+        byte columnregister = 4 * column + columnregisteroffset;
+        byte column2register = 4 * column + column2registeroffset;
+
+        byte row = y % 8;
+        byte rowregisteroffset = (next_state[x][y]) ? 0x27 : 0x07;
+        byte row2registeroffset = (next_state[x][y + 16]) ? 0x27 : 0x07;
+
+        byte rowregister =  4 * row + rowregisteroffset;
+        byte row2register =  4 * row + row2registeroffset;
+
+        // Now we will flip some bits!
+        // Powerup!
+        i2cwrite(rowdriveraddress,    rowregister          , 0x10);
+        i2cwrite(rowdriveraddress,    rowregister    + 0x02, 0x00);
+        i2cwrite(row2driveraddress,    row2register          , 0x10);
+        i2cwrite(row2driveraddress,    row2register    + 0x02, 0x00);
+
+        delayMicroseconds(200);
+
+        i2cwrite(columndriveraddress, columnregister       , 0x10);
+        i2cwrite(columndriveraddress, columnregister + 0x02, 0x00);
+        i2cwrite(column2driveraddress, column2register       , 0x10);
+        i2cwrite(column2driveraddress, column2register + 0x02, 0x00);
+
+        delay(2);
+
+        // And powerdown!
+        i2cwrite(rowdriveraddress,    rowregister          , 0x00);
+        i2cwrite(rowdriveraddress,    rowregister    + 0x02, 0x10);
+        i2cwrite(row2driveraddress,    row2register          , 0x00);
+        i2cwrite(row2driveraddress,    row2register    + 0x02, 0x10);
+
+        delayMicroseconds(100);
+
+        i2cwrite(columndriveraddress, columnregister       , 0x00);
+        i2cwrite(columndriveraddress, columnregister + 0x02, 0x10);
+        i2cwrite(column2driveraddress, column2register       , 0x00);
+        i2cwrite(column2driveraddress, column2register + 0x02, 0x10);
+
+        delay(2);
+      }
+    }
+  }
+
+
+}
+
+
+
+
+
 void i2cwrite(byte address, byte reg, byte content) {
 #ifdef DEBUG
   Serial.print("I2C: ");
@@ -253,19 +328,15 @@ void everythingoff(uint8_t address) {
 }
 
 void ClearScreen() {
-  for (uint16_t y = 0; y < ROWS; y++) {
-    for (uint16_t x = 0; x < COLS; x++) {
-      flipdot(x, y, 0);
-    }
-  }
+  memset(current_state, 1, sizeof(current_state));
+  memset(next_state, 0, sizeof(next_state));
+  fullupdate();
 }
 
 void YellowScreen() {
-  for (uint16_t y = 0; y < ROWS; y++) {
-    for (uint16_t x = 0; x < COLS; x++) {
-      flipdot(x, y, 1);
-    }
-  }
+  memset(current_state, 0, sizeof(current_state));
+  memset(next_state, 1, sizeof(next_state));
+  fullupdate();
 }
 
 void i2cscanner() {
@@ -366,23 +437,24 @@ void GoLnext() {
     }
   }
 
-  for (uint16_t x = 0; x < (COLS / 2); x++) {
-    for (uint16_t y = 0; y < (ROWS / 2); y++) {
-      if (current_state[x][y] != next_state[x][y]) {
-        flipdot(x, y, next_state[x][y]);
-      }
-      if (current_state[COLS - 1 - x][ROWS - 1 - y] != next_state[COLS - 1 - x][ROWS - 1 - y]) {
-        flipdot(COLS - 1 - x, ROWS - 1 - y, next_state[COLS - 1 - x][ROWS - 1 - y]);
-      }
-      if (current_state[COLS - 1 - x][y] != next_state[COLS - 1 - x][y]) {
-        flipdot(COLS - 1 - x, y, next_state[COLS - 1 - x][y]);
-      }
-      if (current_state[x][ROWS - 1 - y] != next_state[x][ROWS - 1 - y]) {
-        flipdot(x, ROWS - 1 - y, next_state[x][ROWS - 1 - y]);
-      }
-    }
-  }
-  // discard the old state and keep the new one
+  //  for (uint16_t x = 0; x < (COLS / 2); x++) {
+  //    for (uint16_t y = 0; y < (ROWS / 2); y++) {
+  //      if (current_state[x][y] != next_state[x][y]) {
+  //        flipdot(x, y, next_state[x][y]);
+  //      }
+  //      if (current_state[COLS - 1 - x][ROWS - 1 - y] != next_state[COLS - 1 - x][ROWS - 1 - y]) {
+  //        flipdot(COLS - 1 - x, ROWS - 1 - y, next_state[COLS - 1 - x][ROWS - 1 - y]);
+  //      }
+  //      if (current_state[COLS - 1 - x][y] != next_state[COLS - 1 - x][y]) {
+  //        flipdot(COLS - 1 - x, y, next_state[COLS - 1 - x][y]);
+  //      }
+  //      if (current_state[x][ROWS - 1 - y] != next_state[x][ROWS - 1 - y]) {
+  //        flipdot(x, ROWS - 1 - y, next_state[x][ROWS - 1 - y]);
+  //      }
+  //    }
+  //  }
+  //discard the old state and keep the new one
+  fullupdate();
   memcpy(current_state, next_state, sizeof next_state);
 }
 
@@ -770,6 +842,7 @@ void tetrissetup()
 
 void loop() {
   yield();
+  Serial.println("loop");
 
 #ifdef NETWORK
   static uint8_t prevFramebuffer[ROWS * COLS / 8] = { 0 };
@@ -871,6 +944,7 @@ void loop() {
 
 #ifdef GOL
   GoL();
+  ClearScreen();
 #endif
 
 #ifdef SNAKE
