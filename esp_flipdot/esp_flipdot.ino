@@ -33,7 +33,7 @@
 //  Note: The PCF9685 does have adress ranges up to 7F but after 0x6F
 //        there are some adresses used for other purposes (0x70 ALL_CALL for instance)
 //        to make $math easier, i chose not to go above 6F (48 chips distributed over 8 boards)
-//        In theory you could add two more boards. Since i only have 5 flipdot panels of this type
+//        In theory you could add two more boards. Since i only have 8 flipdot panels of this type
 //        I won't bother. ;)
 //
 //  Registers PCA9685:
@@ -172,8 +172,8 @@ void flipdot(uint16_t x, uint16_t y, bool color) {
   for (uint8_t address = 0x60 + (panelnumber * 2); address < 0x62 + (panelnumber * 2); address++) {
     everythingoff(address);
   }
-//
-//  // columns
+  //
+  //  // columns
   for (uint8_t address = 0x40 + (panelnumber * 4); address < 0x44 + (panelnumber * 4); address++) {
     everythingoff(address);
   }
@@ -204,7 +204,10 @@ void flipdot(uint16_t x, uint16_t y, bool color) {
 
 
 void fullupdate() {
+#ifdef DEBUG
   unsigned long starttijd = millis();
+#endif
+
   // current_state[COLS][ROWS];
   // next_state[COLS][ROWS];
   // Only works on two panels stacked on top of each other!
@@ -220,10 +223,6 @@ void fullupdate() {
         byte column2driveraddress = 0x44 + (x / 8);
         byte row2driveraddress    = 0x62 + (y / 8);
 
-        // Now we determine what column and row we're on (%8) and determine which register matches
-        // If color is HIGH then we need the column to be at positive rail and row at gnd-rail.
-        // If color is LOW then we need the row to be at positive rail and column at gnd-rail.
-        // This is done in hardware by using the first 8 outputs of the chip for the gnd-rail and the second 8 for the positive rail.
         byte column = x % 8;
 
         byte columnregisteroffset = (next_state[x][y]) ? 0x07 : 0x27;
@@ -242,44 +241,33 @@ void fullupdate() {
         // Now we will flip some bits!
         // Powerup!
         i2cwrite(rowdriveraddress,    rowregister          , 0x10);
-        //i2cwrite(rowdriveraddress,    rowregister    + 0x02, 0x00);
         i2cwrite(row2driveraddress,    row2register          , 0x10);
-        //i2cwrite(row2driveraddress,    row2register    + 0x02, 0x00);
 
         delayMicroseconds(1);
 
         i2cwrite(columndriveraddress, columnregister       , 0x10);
-        //i2cwrite(columndriveraddress, columnregister + 0x02, 0x00);
         i2cwrite(column2driveraddress, column2register       , 0x10);
-        //i2cwrite(column2driveraddress, column2register + 0x02, 0x00);
 
         delayMicroseconds(1);
-        //everythingoff(0x70);
 
         // And powerdown!
         i2cwrite(rowdriveraddress,    rowregister          , 0x00);
-        //i2cwrite(rowdriveraddress,    rowregister    + 0x02, 0x10);
         i2cwrite(row2driveraddress,    row2register          , 0x00);
-        //i2cwrite(row2driveraddress,    row2register    + 0x02, 0x10);
 
         delayMicroseconds(1);
 
         i2cwrite(columndriveraddress, columnregister       , 0x00);
-       // i2cwrite(columndriveraddress, columnregister + 0x02, 0x10);
         i2cwrite(column2driveraddress, column2register       , 0x00);
-        //i2cwrite(column2driveraddress, column2register + 0x02, 0x10);
 
         delayMicroseconds(1);
       }
     }
   }
-unsigned long eindtijd = millis();
-Serial.println(eindtijd - starttijd);
-//delay(100);
+#ifdef DEBUG
+  unsigned long eindtijd = millis();
+  Serial.println(eindtijd - starttijd);
+#endif
 }
-
-
-
 
 
 void i2cwrite(byte address, byte reg, byte content) {
@@ -309,36 +297,18 @@ void i2cwrite(byte address, byte reg, byte content) {
 
 
 void resetPCA9685() {
-  i2cwrite(0x70, 0x00, 0x80); // Reset all PCA9865s on the bus
-  delay(10);
-  i2cwrite(0x70, 0x00, 0x00); // Set the Mode0 register to normal operation
-  delay(5);
-  everythingoff(0x70); // just making sure
-  delay(10);
-
   for (uint8_t x = 0x40; x < 0x6F; x++) {
-    i2cwrite(x, 0x00, 0x80);
-    i2cwrite(x, 0x00, 0b00000001);
-     i2cwrite(x, 0x01, 0b00000100);
-     i2cwrite(x, 0x00, 0b00010001);
-     i2cwrite(x, 0xFE, 0x03);
-     i2cwrite(x, 0x00, 0b00000001);
-     everythingoff(x);
+    i2cwrite(x, 0x00, 0x80); // ???
+    i2cwrite(x, 0x00, 0b00000001); // Awake and responds to 'all call'
+    i2cwrite(x, 0x01, 0b00000100); //
+    i2cwrite(x, 0x00, 0b00010001); // Sleep mode and responds to 'all call'
+    i2cwrite(x, 0xFE, 0x03);       // Set PWM frequency to 1526hz (maximum), formula is round( (osc_clock / ( 4096*update_rate ) ) - 1 ), so round ( ( 25mhz / (4096*1526) ) - 1 ) = 0x03
+    i2cwrite(x, 0x00, 0b00000001); // Awake and responds to 'all call'
+    everythingoff(x);
   }
 
-  
-  // output change on ACK instead of stop
-  delay(20);
 
-  
 
-//  Addresses 0x40 - 0x5F columndrivers (4 on a board, for 32 colums)
-//            0x60 - 0x6F rowdriver (2 on a bord, for 16 rows)
-//            0x70        all call
-  // 0x00, 0b00010001, sleep mode en all call
-  // 0x00, 0b00000001, wakker en all call
-  // 0x01, 0b00001100, output change on ACK
-  // 0x01, 0b00000100, output change on STOP (default)
 }
 
 void everythingoff(uint8_t address) {
