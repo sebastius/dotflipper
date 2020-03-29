@@ -72,7 +72,6 @@
 #endif
 
 #ifdef TETRIS
-
 #include "tetris.h"
 
 enum key_state {NONE, JOY_UP, JOY_DOWN, JOY_LEFT, JOY_RIGHT, JOY_PRESSED};
@@ -82,7 +81,6 @@ unsigned long cur_time;
 #endif
 
 #include <Wire.h>
-//TwoWire Wire2 = TwoWire();
 
 #define width 1         // in number of panels
 #define height 2        // in number of panels
@@ -103,8 +101,6 @@ unsigned long cur_time;
 // Framebuffers
 boolean current_state[COLS][ROWS];
 boolean next_state[COLS][ROWS];
-
-
 
 
 #ifdef SNAKE
@@ -134,10 +130,7 @@ uint16_t udpPort = 1337;
 void flipdot(uint16_t x, uint16_t y, bool color) {
   // This routine seems a bit convoluted, calculating the addresses for each pixel when you could make a map beforehand.
   // However the math takes up < 1ms for 8 panels in total (64x64 sets of calculations) on an 80mhz ESP8266.
-  // The actual flipping of the dots is what is slowing us down, at the moment at 5ms per dot.
-  // So 64x64 would take approximately 22 seconds for a full flip.
-  // One 32x16 panel will need approximately 2.5 seconds (and then some delay afterwards to let the dots settle)
-  //
+
   // Two ideas for improvement:
   // - flipping a dot on all 8 panels
   // - partial refresh (so not changing what doesnt need changing)
@@ -179,8 +172,8 @@ void flipdot(uint16_t x, uint16_t y, bool color) {
   for (uint8_t address = 0x60 + (panelnumber * 2); address < 0x62 + (panelnumber * 2); address++) {
     everythingoff(address);
   }
-
-  // columns
+//
+//  // columns
   for (uint8_t address = 0x40 + (panelnumber * 4); address < 0x44 + (panelnumber * 4); address++) {
     everythingoff(address);
   }
@@ -188,29 +181,30 @@ void flipdot(uint16_t x, uint16_t y, bool color) {
   // Now we will flip some bits!
   // Powerup!
   i2cwrite(rowdriveraddress,    rowregister          , 0x10);
-  i2cwrite(rowdriveraddress,    rowregister    + 0x02, 0x00);
+  //i2cwrite(rowdriveraddress,    rowregister    + 0x02, 0x00);
 
-  delayMicroseconds(50);
+  delayMicroseconds(1);
 
   i2cwrite(columndriveraddress, columnregister       , 0x10);
-  i2cwrite(columndriveraddress, columnregister + 0x02, 0x00);
+  //i2cwrite(columndriveraddress, columnregister + 0x02, 0x00);
 
-  delay(pulsetime);
+  delayMicroseconds(1);
 
   // And powerdown!
   i2cwrite(rowdriveraddress,    rowregister          , 0x00);
-  i2cwrite(rowdriveraddress,    rowregister    + 0x02, 0x10);
+  //i2cwrite(rowdriveraddress,    rowregister    + 0x02, 0x10);
 
-  delayMicroseconds(50);
+  delayMicroseconds(1);
 
   i2cwrite(columndriveraddress, columnregister       , 0x00);
-  i2cwrite(columndriveraddress, columnregister + 0x02, 0x10);
+  //i2cwrite(columndriveraddress, columnregister + 0x02, 0x10);
 
-  delay(offtime);
+  delayMicroseconds(1);
 }
 
 
 void fullupdate() {
+  unsigned long starttijd = millis();
   // current_state[COLS][ROWS];
   // next_state[COLS][ROWS];
   // Only works on two panels stacked on top of each other!
@@ -248,38 +242,40 @@ void fullupdate() {
         // Now we will flip some bits!
         // Powerup!
         i2cwrite(rowdriveraddress,    rowregister          , 0x10);
-        i2cwrite(rowdriveraddress,    rowregister    + 0x02, 0x00);
+        //i2cwrite(rowdriveraddress,    rowregister    + 0x02, 0x00);
         i2cwrite(row2driveraddress,    row2register          , 0x10);
-        i2cwrite(row2driveraddress,    row2register    + 0x02, 0x00);
+        //i2cwrite(row2driveraddress,    row2register    + 0x02, 0x00);
 
-        delayMicroseconds(200);
+        delayMicroseconds(1);
 
         i2cwrite(columndriveraddress, columnregister       , 0x10);
-        i2cwrite(columndriveraddress, columnregister + 0x02, 0x00);
+        //i2cwrite(columndriveraddress, columnregister + 0x02, 0x00);
         i2cwrite(column2driveraddress, column2register       , 0x10);
-        i2cwrite(column2driveraddress, column2register + 0x02, 0x00);
+        //i2cwrite(column2driveraddress, column2register + 0x02, 0x00);
 
-        delay(2);
+        delayMicroseconds(1);
+        //everythingoff(0x70);
 
         // And powerdown!
         i2cwrite(rowdriveraddress,    rowregister          , 0x00);
-        i2cwrite(rowdriveraddress,    rowregister    + 0x02, 0x10);
+        //i2cwrite(rowdriveraddress,    rowregister    + 0x02, 0x10);
         i2cwrite(row2driveraddress,    row2register          , 0x00);
-        i2cwrite(row2driveraddress,    row2register    + 0x02, 0x10);
+        //i2cwrite(row2driveraddress,    row2register    + 0x02, 0x10);
 
-        delayMicroseconds(100);
+        delayMicroseconds(1);
 
         i2cwrite(columndriveraddress, columnregister       , 0x00);
-        i2cwrite(columndriveraddress, columnregister + 0x02, 0x10);
+       // i2cwrite(columndriveraddress, columnregister + 0x02, 0x10);
         i2cwrite(column2driveraddress, column2register       , 0x00);
-        i2cwrite(column2driveraddress, column2register + 0x02, 0x10);
+        //i2cwrite(column2driveraddress, column2register + 0x02, 0x10);
 
-        delay(2);
+        delayMicroseconds(1);
       }
     }
   }
-
-
+unsigned long eindtijd = millis();
+Serial.println(eindtijd - starttijd);
+//delay(100);
 }
 
 
@@ -310,13 +306,39 @@ void i2cwrite(byte address, byte reg, byte content) {
   Wire.endTransmission();
 }
 
+
+
 void resetPCA9685() {
   i2cwrite(0x70, 0x00, 0x80); // Reset all PCA9865s on the bus
   delay(10);
   i2cwrite(0x70, 0x00, 0x00); // Set the Mode0 register to normal operation
   delay(5);
   everythingoff(0x70); // just making sure
+  delay(10);
+
+  for (uint8_t x = 0x40; x < 0x6F; x++) {
+    i2cwrite(x, 0x00, 0x80);
+    i2cwrite(x, 0x00, 0b00000001);
+     i2cwrite(x, 0x01, 0b00000100);
+     i2cwrite(x, 0x00, 0b00010001);
+     i2cwrite(x, 0xFE, 0x03);
+     i2cwrite(x, 0x00, 0b00000001);
+     everythingoff(x);
+  }
+
+  
+  // output change on ACK instead of stop
   delay(20);
+
+  
+
+//  Addresses 0x40 - 0x5F columndrivers (4 on a board, for 32 colums)
+//            0x60 - 0x6F rowdriver (2 on a bord, for 16 rows)
+//            0x70        all call
+  // 0x00, 0b00010001, sleep mode en all call
+  // 0x00, 0b00000001, wakker en all call
+  // 0x01, 0b00001100, output change on ACK
+  // 0x01, 0b00000100, output change on STOP (default)
 }
 
 void everythingoff(uint8_t address) {
@@ -324,7 +346,7 @@ void everythingoff(uint8_t address) {
   i2cwrite(address, 0xFA, 0x00);
   i2cwrite(address, 0xFB, 0x00);
   i2cwrite(address, 0xFC, 0x00);
-  i2cwrite(address, 0xFD, 0x10);
+  i2cwrite(address, 0xFD, 0x00);
 }
 
 void ClearScreen() {
@@ -337,6 +359,16 @@ void YellowScreen() {
   memset(current_state, 0, sizeof(current_state));
   memset(next_state, 1, sizeof(next_state));
   fullupdate();
+}
+
+void pixelwalker() {
+  for (uint8_t x = 0; x < 32; x++) {
+    for (uint8_t y = 0; y < 32; y++) {
+      flipdot(x, y, 1);
+      delay(50);
+      flipdot(x, y, 0);
+    }
+  }
 }
 
 void i2cscanner() {
@@ -437,23 +469,6 @@ void GoLnext() {
     }
   }
 
-  //  for (uint16_t x = 0; x < (COLS / 2); x++) {
-  //    for (uint16_t y = 0; y < (ROWS / 2); y++) {
-  //      if (current_state[x][y] != next_state[x][y]) {
-  //        flipdot(x, y, next_state[x][y]);
-  //      }
-  //      if (current_state[COLS - 1 - x][ROWS - 1 - y] != next_state[COLS - 1 - x][ROWS - 1 - y]) {
-  //        flipdot(COLS - 1 - x, ROWS - 1 - y, next_state[COLS - 1 - x][ROWS - 1 - y]);
-  //      }
-  //      if (current_state[COLS - 1 - x][y] != next_state[COLS - 1 - x][y]) {
-  //        flipdot(COLS - 1 - x, y, next_state[COLS - 1 - x][y]);
-  //      }
-  //      if (current_state[x][ROWS - 1 - y] != next_state[x][ROWS - 1 - y]) {
-  //        flipdot(x, ROWS - 1 - y, next_state[x][ROWS - 1 - y]);
-  //      }
-  //    }
-  //  }
-  //discard the old state and keep the new one
   fullupdate();
   memcpy(current_state, next_state, sizeof next_state);
 }
@@ -486,19 +501,14 @@ void GoLrandomize() {
 
 
 void setup() {
-#if defined(__AVR__)
-  Wire.begin(); // Nano
-  Wire.setClock(400000); // Nano + ESP8266
-#elif defined(ESP8266)
-  Wire.begin(D2, D1); // ESP8266, SDA, SCL
-  Wire.setClock(400000); // ESP8266
-#endif
+
+
+  Wire.begin();
+  Wire.setClock(1000000); // ESP32
 
   Serial.begin(115200);
   Serial.println();
 
-  everythingoff(0x70);
-  Serial.println();
   Serial.println("Flipdot software");
 
 #ifdef DEBUG
@@ -943,8 +953,13 @@ void loop() {
 #endif
 
 #ifdef GOL
+  ClearScreen();
   GoL();
   ClearScreen();
+  //YellowScreen();
+  //ClearScreen();
+  //pixelwalker();
+  //YellowScreen();
 #endif
 
 #ifdef SNAKE
