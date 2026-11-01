@@ -18,28 +18,29 @@
 //  A cheat-sheet is provided on the board.
 //  (0 = 000, 1 = 001, 2 = 010, 3 = 011, 4 = 100, 5 = 101, 6 = 110, 7 = 111)
 //
-//  Files:
+//  Build with PlatformIO, see platformio.ini.
+//
+//  Files (in src/):
 //    config.h       panel layout, features and settings
 //    pca9685.*      low level I2C to the PCA9685 driver chips
 //    display.*      framebuffers and flipping dots
 //    pictures.h     bitmaps
 //    gol.*          Game of Life
-//    network.*      WiFiManager and OTA updates
+//    wifisetup.*    WiFiManager and OTA updates
 //    udpdisplay.*   show framebuffers received over UDP (NETWORK)
 //
 //  WiFi: on first boot (or when the known network is gone) the ESP starts an access point
 //  called "flipdot-setup". Connect to it and choose your network.
 //  Hold the BOOT button during startup to forget the stored network.
-//
-//  Required library: WiFiManager by tzapu
 
+#include <Arduino.h>
 #include <Wire.h>
 #include <ArduinoOTA.h>
 
 #include "config.h"
 #include "pca9685.h"
 #include "display.h"
-#include "network.h"
+#include "wifisetup.h"
 
 #ifdef GOL
 #include "gol.h"

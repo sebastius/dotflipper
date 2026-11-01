@@ -5,7 +5,7 @@
 #include "config.h"
 #include "display.h"
 #include "pictures.h"
-#include "network.h"
+#include "wifisetup.h"
 
 void setupWiFi() {
   WiFi.mode(WIFI_STA);
