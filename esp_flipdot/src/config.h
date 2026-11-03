@@ -2,8 +2,7 @@
 
 // Features
 //#define DEBUG
-#define GOL
-//#define NETWORK   // Show UDP framebuffers instead of Game of Life
+//#define NETWORK    // Only show UDP framebuffers, instead of the clock and animations
 
 // Panel layout
 #define PANELS_X     1   // in number of panels
@@ -27,6 +26,18 @@
 #define WIFI_PORTAL_TIMEOUT 180              // in seconds, reboot when nobody configured WiFi
 #define OTA_PASSWORD        "admin"
 #define UDP_PORT            1337
+
+// Clock
+// Netherlands: CET (UTC+1), CEST (UTC+2) from the last Sunday of March 02:00 until the last Sunday of October 03:00
+#define CLOCK_TIMEZONE    "CET-1CEST,M3.5.0,M10.5.0/3"
+#define CLOCK_NTP_SERVER1 "nl.pool.ntp.org"
+#define CLOCK_NTP_SERVER2 "pool.ntp.org"
+
+// Rain
+#define RAIN_DROPS    12   // Number of drops on or above the screen
+#define RAIN_MAX_TAIL  2    // in dots, every drop gets a tail of 0 up to this
+#define RAIN_SLOWEST   3    // Slowest drops fall one row every this many frames
+#define RAIN_FRAMETIME 40   // in ms
 
 // Game of Life
 #define GOL_GENERATIONS 100

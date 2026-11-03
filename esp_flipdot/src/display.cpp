@@ -115,6 +115,45 @@ void fullupdate() {
   memcpy(current_state, next_state, sizeof(next_state));
 }
 
+// Sets a dot in next_state, dots outside the screen are ignored.
+void setdot(int16_t x, int16_t y, bool on) {
+  if (x >= 0 && x < COLS && y >= 0 && y < ROWS) {
+    next_state[x][y] = on;
+  }
+}
+
+// Draws a line into next_state (Bresenham), dots outside the screen are ignored.
+void drawline(int16_t x0, int16_t y0, int16_t x1, int16_t y1, bool on) {
+  int16_t dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+  int16_t dy = -abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+  int16_t err = dx + dy;
+  while (true) {
+    setdot(x0, y0, on);
+    if (x0 == x1 && y0 == y1) {
+      break;
+    }
+    int16_t e2 = 2 * err;
+    if (e2 >= dy) {
+      err += dy;
+      x0 += sx;
+    }
+    if (e2 <= dx) {
+      err += dx;
+      y0 += sy;
+    }
+  }
+}
+
+// Flips every dot to next_state, also the ones that should already be right.
+void forcefullupdate() {
+  for (uint8_t x = 0; x < COLS; x++) {
+    for (uint8_t y = 0; y < ROWS; y++) {
+      current_state[x][y] = !next_state[x][y];
+    }
+  }
+  fullupdate();
+}
+
 void ClearScreen() {
   memset(current_state, 1, sizeof(current_state));
   memset(next_state, 0, sizeof(next_state));

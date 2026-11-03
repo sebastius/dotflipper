@@ -25,7 +25,36 @@
 //    pca9685.*      low level I2C to the PCA9685 driver chips
 //    display.*      framebuffers and flipping dots
 //    pictures.h     bitmaps
-//    gol.*          Game of Life
+//    flipsettings.* settings from the web interface, stored in flash
+//    player.*       decides what is on the screen: clock, animations or nothing
+//    webui.*        web interface and JSON API on http://flipdot.local
+//    clockface.*    clock faces: big, time + date, analog, words, seconds and binary, NTP
+//    transition.*   transitions when the minute changes
+//    fonts.h        fonts for the clock
+//    animation.h    interface every animation implements
+//    animations.cpp list of all animations
+//    life.cpp       Game of Life, HighLife, Day & Night, Seeds and the clock in Life
+//    rain.cpp       falling raindrops
+//    automaton.cpp  1D cellular automaton
+//    plasma.cpp     dithered plasma
+//    cube.cpp       rotating wireframe cube
+//    mandelbrot.cpp zooming into the Mandelbrot set
+//    balls.cpp      bouncing balls
+//    maze.cpp       maze being dug and solved
+//    langton.cpp    Langton's ant
+//    sand.cpp       falling sand
+//    starfield.cpp  flying through the stars
+//    crystal.cpp    crystal growth (diffusion limited aggregation)
+//    chaos.cpp      chaos game: fern and Sierpinski triangle
+//    truchet.cpp    Truchet tiles turning one by one
+//    spirograph.cpp spirograph and Lissajous figures
+//    hilbert.cpp    Hilbert curve drawing itself
+//    boids.cpp      flock of birds
+//    fireworks.cpp  fireworks
+//    pendulum.cpp   pendulum wave
+//    snow.cpp       snow that piles up
+//    lightning.cpp  lightning
+//    metaballs.cpp  outlines of melting blobs
 //    wifisetup.*    WiFiManager and OTA updates
 //    udpdisplay.*   show framebuffers received over UDP (NETWORK)
 //
@@ -42,12 +71,13 @@
 #include "display.h"
 #include "wifisetup.h"
 
-#ifdef GOL
-#include "gol.h"
-#endif
-
 #ifdef NETWORK
 #include "udpdisplay.h"
+#else
+#include "flipsettings.h"
+#include "player.h"
+#include "webui.h"
+#include "clockface.h"
 #endif
 
 #define WIFI_RESET_PIN 0  // BOOT button on most ESP32 boards
@@ -74,6 +104,10 @@ void setup() {
 
   Serial.println("Flipdot getting ready to go!");
 
+#ifndef NETWORK
+  loadsettings();
+#endif
+
   resetPCA9685();
   YellowScreen();
   ClearScreen();
@@ -89,6 +123,11 @@ void setup() {
 
 #ifdef NETWORK
   udpdisplaysetup();
+#else
+  clocksetup();
+  webuisetup();
+  playersetup();
+  Serial.printf("Web interface on http://%s.local/\n", HOSTNAME);
 #endif
 
   Serial.println("Ready");
@@ -98,11 +137,10 @@ void loop() {
   ArduinoOTA.handle();
   yield();
 
-#if defined(NETWORK)
+#ifdef NETWORK
   udpdisplayloop();
-#elif defined(GOL)
-  ClearScreen();
-  GoL();
-  ClearScreen();
+#else
+  webuiloop();
+  playerloop();
 #endif
 }
