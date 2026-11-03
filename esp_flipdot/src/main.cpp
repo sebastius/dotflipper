@@ -53,7 +53,7 @@
 #define WIFI_RESET_PIN 0  // BOOT button on most ESP32 boards
 
 void setup() {
-  Wire.begin();
+  Wire.begin(I2C_SDA, I2C_SCL);
   Wire.setClock(1000000); // ESP32
 
   Serial.begin(115200);

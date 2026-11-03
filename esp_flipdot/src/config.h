@@ -17,6 +17,10 @@
 #error "Please check PANELS_X and PANELS_Y: both should be > 0 and PANELS_X*PANELS_Y should not be > 8!"
 #endif
 
+// I2C bus to the PCA9685 drivers
+#define I2C_SDA 25
+#define I2C_SCL 26
+
 // Network
 #define HOSTNAME            "flipdot"
 #define WIFI_AP_NAME        "flipdot-setup"  // Access point name of the WiFiManager config portal
