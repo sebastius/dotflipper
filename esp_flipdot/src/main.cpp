@@ -86,6 +86,9 @@ void setup() {
   Wire.begin(I2C_SDA, I2C_SCL);
   Wire.setClock(1000000); // ESP32
 
+  // First thing: after a reset in the middle of a pulse the drivers are still on
+  resetPCA9685();
+
   Serial.begin(115200);
   Serial.println();
 
@@ -108,7 +111,6 @@ void setup() {
   loadsettings();
 #endif
 
-  resetPCA9685();
   YellowScreen();
   ClearScreen();
 

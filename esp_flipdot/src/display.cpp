@@ -50,6 +50,14 @@ void flipdot(uint16_t x, uint16_t y, bool color) {
   delayMicroseconds(100);
 }
 
+static void countpulse(uint32_t cycles) {
+  i2cstats.pulses++;
+  i2cstats.pulsetotal += cycles;
+  if (cycles > i2cstats.pulsemax) {
+    i2cstats.pulsemax = cycles;
+  }
+}
+
 // Flips every changed dot from current_state to next_state, two panels at a time.
 // Only works on two panels stacked on top of each other!
 void fullupdate() {
@@ -91,13 +99,17 @@ void fullupdate() {
         delayMicroseconds(1);
 
         i2cwrite(columndriveraddress, columnregister       , 0x10);
+        uint32_t pulsestart = ESP.getCycleCount();
         i2cwrite(column2driveraddress, column2register       , 0x10);
+        uint32_t pulse2start = ESP.getCycleCount();
 
         delayMicroseconds(1);
 
         // And powerdown!
         i2cwrite(rowdriveraddress,    rowregister          , 0x00);
+        uint32_t pulseend = ESP.getCycleCount();
         i2cwrite(row2driveraddress,    row2register          , 0x00);
+        uint32_t pulse2end = ESP.getCycleCount();
 
         delayMicroseconds(1);
 
@@ -105,6 +117,9 @@ void fullupdate() {
         i2cwrite(column2driveraddress, column2register       , 0x00);
 
         delayMicroseconds(1);
+
+        countpulse(pulseend - pulsestart);
+        countpulse(pulse2end - pulse2start);
       }
     }
   }

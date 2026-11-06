@@ -3,6 +3,8 @@
 #include "config.h"
 #include "pca9685.h"
 
+I2CStats i2cstats;
+
 void i2cwrite(byte address, byte reg, byte content) {
 #ifdef DEBUG
   Serial.print("I2C: ");
@@ -24,7 +26,21 @@ void i2cwrite(byte address, byte reg, byte content) {
   Wire.beginTransmission(address);
   Wire.write(reg);
   Wire.write(content);
-  Wire.endTransmission();
+  uint8_t result = Wire.endTransmission();
+
+  i2cstats.writes++;
+  if (result != 0) {
+    if (result == 2 || result == 3) {
+      i2cstats.nack++;
+    } else if (result == 5) {
+      i2cstats.timeout++;
+    } else {
+      i2cstats.other++;
+    }
+    if (content == 0x00 && reg >= 0x06 && reg <= 0x45) {
+      i2cstats.offfailed++;
+    }
+  }
 }
 
 void resetPCA9685() {
@@ -37,6 +53,7 @@ void resetPCA9685() {
     i2cwrite(x, 0x00, 0b00000001); // Awake and responds to 'all call'
     everythingoff(x);
   }
+  i2cstats = {};  // Addresses without a chip always fail, those don't count
 }
 
 void everythingoff(uint8_t address) {

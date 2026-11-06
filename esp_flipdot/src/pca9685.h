@@ -35,6 +35,21 @@
 //  Mode 0    0x00 - Normal operation
 //            0x80 - Reset
 
+// Counters since the last resetPCA9685(), to find out how reliable the bus and the pulses are.
+// Pulses are measured from the column going on until the row goes off, in CPU cycles.
+struct I2CStats {
+  uint32_t writes;
+  uint32_t nack;       // No acknowledge from the chip
+  uint32_t timeout;
+  uint32_t other;
+  uint32_t offfailed;  // Failed writes that should have switched an output off
+  uint32_t pulses;
+  uint32_t pulsemax;
+  uint64_t pulsetotal;
+};
+
+extern I2CStats i2cstats;
+
 void i2cwrite(byte address, byte reg, byte content);
 void resetPCA9685();
 void everythingoff(uint8_t address);

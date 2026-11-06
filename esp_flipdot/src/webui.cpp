@@ -6,6 +6,7 @@
 #include "animation.h"
 #include "flipsettings.h"
 #include "player.h"
+#include "pca9685.h"
 #include "webui.h"
 
 static WebServer server(80);
@@ -304,6 +305,19 @@ static void sendstate() {
   } else {
     doc["time"] = nullptr;
   }
+
+  doc["uptime"] = millis() / 1000;
+
+  JsonObject i2c = doc["i2c"].to<JsonObject>();
+  uint32_t mhz = getCpuFrequencyMhz();
+  i2c["writes"] = i2cstats.writes;
+  i2c["nack"] = i2cstats.nack;
+  i2c["timeout"] = i2cstats.timeout;
+  i2c["other"] = i2cstats.other;
+  i2c["off_failed"] = i2cstats.offfailed;
+  i2c["pulses"] = i2cstats.pulses;
+  i2c["pulse_max_us"] = i2cstats.pulsemax / mhz;
+  i2c["pulse_avg_us"] = i2cstats.pulses ? (uint32_t)(i2cstats.pulsetotal / i2cstats.pulses / mhz) : 0;
 
   settingstojson(doc["settings"].to<JsonObject>());
 
