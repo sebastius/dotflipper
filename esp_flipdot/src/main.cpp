@@ -22,7 +22,8 @@
 //
 //  Files (in src/):
 //    config.h       panel layout, features and settings
-//    pca9685.*      low level I2C to the PCA9685 driver chips
+//    pca9685.*      bit-banged I2C to the PCA9685 driver chips
+//    i2cpins.h      direct access to the I2C pins
 //    display.*      framebuffers and flipping dots
 //    pictures.h     bitmaps
 //    flipsettings.* settings from the web interface, stored in flash
@@ -63,7 +64,6 @@
 //  Hold the BOOT button during startup to forget the stored network.
 
 #include <Arduino.h>
-#include <Wire.h>
 #include <ArduinoOTA.h>
 
 #include "config.h"
@@ -83,8 +83,7 @@
 #define WIFI_RESET_PIN 0  // BOOT button on most ESP32 boards
 
 void setup() {
-  Wire.begin(I2C_SDA, I2C_SCL);
-  Wire.setClock(1000000); // ESP32
+  i2cbegin();
 
   // First thing: after a reset in the middle of a pulse the drivers are still on
   resetPCA9685();

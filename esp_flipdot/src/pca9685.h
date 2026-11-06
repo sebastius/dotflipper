@@ -40,8 +40,8 @@
 struct I2CStats {
   uint32_t writes;
   uint32_t nack;       // No acknowledge from the chip
-  uint32_t timeout;
-  uint32_t other;
+  uint32_t timeout;    // A line stuck low
+  uint32_t other;      // Not used anymore, stays 0
   uint32_t offfailed;  // Failed writes that should have switched an output off
   uint32_t pulses;
   uint32_t pulsemax;
@@ -53,6 +53,9 @@ extern I2CStats i2cstats;
 // Set by emergencystop(), stays set until a restart. Nothing may flip anymore.
 extern bool i2cfault;
 
+extern uint32_t i2ccyclesperus;
+
+void i2cbegin();
 bool i2cwrite(byte address, byte reg, byte content);  // False when the chip didn't take it
 void i2coff(byte address, byte reg);  // Switch an output off, whatever it takes
 void emergencystop();

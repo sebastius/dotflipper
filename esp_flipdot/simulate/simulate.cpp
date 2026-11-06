@@ -19,6 +19,9 @@
 #include "Wire.h"
 #include "display.h"
 #include "pca9685.h"
+#ifdef HAS_BITBANG
+#include "simulatepins.h"
+#endif
 
 FakeSerial Serial;
 FakeESP ESP;
@@ -33,6 +36,7 @@ static long droplength = 1;
 static uint8_t dropresult = 2;
 static long ledwrites;
 static int deadchip = -1;       // Chip that stopped working altogether
+static bool stuckscl = false;   // Something holds SCL low
 
 uint32_t FakeESP::getCycleCount() { return cycles; }
 void delayMicroseconds(unsigned int us) {
@@ -45,6 +49,9 @@ static bool fulloff[0x80];
 static bool dots[PANELS_Y][32][16];
 static long violations;
 static int coilsnow[PANELS_Y];
+static bool coilrunning[PANELS_Y];
+static uint32_t coilstart[PANELS_Y];
+static uint32_t pulseshortest = 0xFFFFFFFF, pulselongest = 0;
 static int maxcoils;
 static bool rule1, rule2;
 
@@ -84,6 +91,15 @@ static void updatemodel() {
     }
     if (coils > maxcoils) maxcoils = coils;
     coilsnow[p] = coils;
+    if (coils && !coilrunning[p]) {
+      coilrunning[p] = true;
+      coilstart[p] = cycles;
+    } else if (!coils && coilrunning[p]) {
+      coilrunning[p] = false;
+      uint32_t length = cycles - coilstart[p];
+      if (length < pulseshortest) pulseshortest = length;
+      if (length > pulselongest) pulselongest = length;
+    }
     if (coils > 1) {
       rule2 = true;
       violation("meer dan 1 spoel tegelijk op een paneel");
@@ -91,11 +107,7 @@ static void updatemodel() {
   }
 }
 
-uint8_t TwoWire::endTransmission() {
-  cycles += 40 * 240;
-  if (!chipexists(address) || address == deadchip) return 2;
-  if (length != 2) return 0;
-  uint8_t reg = data[0], value = data[1];
+static uint8_t handlewrite(uint8_t address, uint8_t reg, uint8_t value) {
   bool led = reg >= 0x07 && reg <= 0x43 && (reg - 7) % 4 == 0;
   if (trace) fprintf(trace, "write %02X %02X %02X\n", address, reg, value);
   if (led) {
@@ -115,6 +127,61 @@ uint8_t TwoWire::endTransmission() {
   updatemodel();
   return 0;
 }
+
+uint8_t TwoWire::endTransmission() {
+  cycles += 40 * 240;
+  if (!chipexists(address) || address == deadchip) return 2;
+  if (length != 2) return 0;
+  return handlewrite(address, data[0], data[1]);
+}
+
+#ifdef HAS_BITBANG
+// A chip on the bus, bit by bit: it only sees what happens on the two lines
+static bool mastersda = true, masterscl = true, chipsda = true;
+static bool busy, ackclock;
+static int bitcount, bytecount;
+static uint8_t value, busaddress, busreg;
+
+static bool sdaline() { return mastersda && chipsda; }
+static bool sclline() { return masterscl && !stuckscl; }
+
+static void changed(bool oldsda, bool oldscl) {
+  cycles += 4;
+  bool sda = sdaline(), scl = sclline();
+  if (oldscl && scl && oldsda && !sda) {  // START
+    busy = true; ackclock = false; bitcount = bytecount = 0; value = 0; chipsda = true;
+  } else if (oldscl && scl && !oldsda && sda) {  // STOP
+    busy = false; chipsda = true;
+  } else if (busy && !oldscl && scl && !ackclock) {
+    value = (value << 1) | sda;
+    bitcount++;
+  } else if (busy && oldscl && !scl) {
+    if (ackclock) {
+      ackclock = false; chipsda = true; bitcount = 0; value = 0; bytecount++;
+    } else if (bitcount == 8) {
+      bool ack = true;
+      if (bytecount == 0) {
+        busaddress = value >> 1;
+        ack = chipexists(busaddress) && busaddress != deadchip && !(value & 1);
+      } else if (bytecount == 1) {
+        busreg = value;
+      } else {
+        ack = handlewrite(busaddress, busreg, value) == 0;
+      }
+      chipsda = !ack;
+      ackclock = true;
+    }
+  }
+}
+
+void sdalow()     { bool a = sdaline(), b = sclline(); mastersda = false; changed(a, b); }
+void sdarelease() { bool a = sdaline(), b = sclline(); mastersda = true;  changed(a, b); }
+void scllow()     { bool a = sdaline(), b = sclline(); masterscl = false; changed(a, b); }
+void sclrelease() { bool a = sdaline(), b = sclline(); masterscl = true;  changed(a, b); }
+bool sdaread()    { cycles += 4; return sdaline(); }
+bool sclread()    { cycles += 4; return sclline(); }
+uint32_t i2ccycles() { return cycles += 2; }
+#endif
 
 static bool alloff() {
   for (int a = 0x40; a < 0x70; a++)
@@ -140,7 +207,7 @@ static void start() {
   memset(outputs, 0, sizeof(outputs));
   memset(fulloff, 0, sizeof(fulloff));
   violations = 0; maxcoils = 0; rule1 = rule2 = false;
-  ledwrites = 0; dropwrite = -1; droplength = 1; deadchip = -1;
+  ledwrites = 0; dropwrite = -1; droplength = 1; deadchip = -1; stuckscl = false;
 #ifdef HAS_FAULT
   i2cfault = false;
 #endif
@@ -160,6 +227,9 @@ int main(int argc, char **argv) {
 
   printf("Normale werking\n");
   srand(1);
+#ifdef HAS_BITBANG
+  i2cbegin();
+#endif
   start();
   long frames = 0;
   bool allmatch = true, offbetween = true;
@@ -175,6 +245,10 @@ int main(int argc, char **argv) {
   ClearScreen();  allmatch &= matches();
   for (int x = 0; x < COLS; x++) for (int y = 0; y < ROWS; y++) { flipdot(x, y, 1); allmatch &= alloff(); flipdot(x, y, 0); }
   printf("  %ld beelden, %ld LED-writes\n", frames, ledwrites);
+#ifdef HAS_BITBANG
+  printf("  spoelpuls in het model: %.1f tot %.1f us, doel %d us\n", pulseshortest / 240.0, pulselongest / 240.0, PULSE_MICROS);
+  check("Regel 5: elke puls binnen 5 us van het doel", pulseshortest / 240.0 > PULSE_MICROS - 5 && pulselongest / 240.0 < PULSE_MICROS + 5, &failures);
+#endif
   check("Regel 1: nooit CHn en CHn+8 samen", !rule1, &failures);
   check("Regel 2: maximaal 1 spoel per paneel", !rule2 && maxcoils == 1, &failures);
   check("Regel 3: alles uit na elke update", offbetween && alloff(), &failures);
@@ -199,9 +273,9 @@ int main(int argc, char **argv) {
   check("Kortsluiting wordt herkend", rule1, &failures);
 
   start();
-  Wire.beginTransmission(0x60); Wire.write(0x27); Wire.write(0x10); Wire.endTransmission();
-  Wire.beginTransmission(0x40); Wire.write(0x07); Wire.write(0x10); Wire.endTransmission();
-  Wire.beginTransmission(0x40); Wire.write(0x0B); Wire.write(0x10); Wire.endTransmission();
+  handlewrite(0x60, 0x27, 0x10);
+  handlewrite(0x40, 0x07, 0x10);
+  handlewrite(0x40, 0x0B, 0x10);
   check("Twee spoelen tegelijk worden herkend", rule2, &failures);
 
 #ifdef HAS_FAULT
@@ -241,15 +315,24 @@ int main(int argc, char **argv) {
   for (int chip : { 0x60, 0x40 }) {
     start();
     for (int x = 0; x < COLS; x++) for (int y = 0; y < ROWS; y++) next_state[x][y] = true;
-    Wire.beginTransmission(chip == 0x60 ? 0x60 : 0x40);
-    Wire.write(chip == 0x60 ? 0x27 : 0x07); Wire.write(0x10);
-    Wire.endTransmission();  // The chip dies with this output on
+    handlewrite(chip, chip == 0x60 ? 0x27 : 0x07, 0x10);  // The chip dies with this output on
     deadchip = chip;
     fullupdate();
     char text[80];
     snprintf(text, sizeof(text), "Chip 0x%02X dood met uitgang aan: noodstop, geen spoelstroom", chip);
     check(text, i2cfault && coilsnow[0] == 0 && coilsnow[1] == 0, &failures);
   }
+#ifdef HAS_BITBANG
+  printf("Bus zit vast\n");
+  start();
+  for (int x = 0; x < COLS; x++) for (int y = 0; y < ROWS; y++) next_state[x][y] = true;
+  stuckscl = true;
+  uint32_t before = cycles;
+  fullupdate();
+  stuckscl = false;
+  check("SCL laag: noodstop, en de code hangt niet", i2cfault, &failures);
+  printf("  tijd tot opgeven: %.1f ms\n", (cycles - before) / 240000.0);
+#endif
 #else
   start();
   for (int x = 0; x < COLS; x++) for (int y = 0; y < ROWS; y++) next_state[x][y] = true;

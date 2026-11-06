@@ -19,6 +19,12 @@
 // I2C bus to the PCA9685 drivers
 #define I2C_SDA 25
 #define I2C_SCL 26
+#define I2C_CLOCK 800000
+
+// Length of the coil pulse. It sets the peak current: 20 V over 20 ohm would end up above what
+// the drivers can take, only a short pulse keeps the current down.
+#define PULSE_MICROS       224
+#define PULSE_LIMIT_MICROS 350  // Emergency stop when a pulse takes longer, one retry of an off write fits
 
 // Network
 #define HOSTNAME            "flipdot"

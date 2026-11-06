@@ -11,6 +11,15 @@ typedef bool boolean;
 
 #define HEX 16
 #define DEC 10
+#define INPUT 1
+#define IRAM_ATTR
+
+typedef int portMUX_TYPE;
+#define portMUX_INITIALIZER_UNLOCKED 0
+#define portENTER_CRITICAL(mux)
+#define portEXIT_CRITICAL(mux)
+inline uint32_t getCpuFrequencyMhz() { return 240; }
+inline void pinMode(int, int) {}
 
 inline void delay(unsigned long) {}
 inline void yield() {}

@@ -1,54 +1,145 @@
-#include <Wire.h>
-
 #include "config.h"
 #include "pca9685.h"
+#include "i2cpins.h"
+
+// Bit-banged I2C. The driver of the ESP32 takes about 85 us per write and how long depends on
+// what happens to be in the flash cache, which made the pulses twice as long in some builds.
+// Everything that runs during a pulse is in IRAM, so it takes the same time in every build.
 
 #define I2C_OFF_RETRIES 3
+#define I2C_STUCK_MICROS 50  // A line that doesn't come up in this time is stuck
+
+#define I2C_OK    0
+#define I2C_NACK  2
+#define I2C_STUCK 5
 
 I2CStats i2cstats;
 bool i2cfault = false;
+uint32_t i2ccyclesperus;
 
-bool i2cwrite(byte address, byte reg, byte content) {
-#ifdef DEBUG
-  Serial.print("I2C: ");
-  if (address < 0x10) {
-    Serial.print("0");
+static uint32_t halfbit;  // in cycles
+
+static inline void IRAM_ATTR waitcycles(uint32_t cycles) {
+  uint32_t start = i2ccycles();
+  while (i2ccycles() - start < cycles) {
   }
-  Serial.print(address, HEX);
-  Serial.print(" ");
-  if (reg < 0x10) {
-    Serial.print("0");
+}
+
+static bool IRAM_ATTR releasescl() {
+  sclrelease();
+  uint32_t start = i2ccycles();
+  while (!sclread()) {
+    if (i2ccycles() - start > I2C_STUCK_MICROS * i2ccyclesperus) {
+      return false;
+    }
   }
-  Serial.print(reg, HEX);
-  Serial.print(" ");
-  if (content < 0x10) {
-    Serial.print("0");
+  return true;
+}
+
+static bool IRAM_ATTR i2cstart() {
+  if (!sdaread() || !sclread()) {
+    return false;
   }
-  Serial.println(content, HEX);
+  sdalow();
+  waitcycles(halfbit);
+  scllow();
+  return true;
+}
+
+static void IRAM_ATTR i2cstop() {
+  waitcycles(halfbit / 4);
+  sdalow();
+  waitcycles(halfbit);
+  releasescl();
+  waitcycles(halfbit);
+  sdarelease();
+  waitcycles(halfbit);
+}
+
+// SDA only changes a while after SCL went low, the level shifters may delay them differently
+static uint8_t IRAM_ATTR i2cbyte(uint8_t value) {
+  for (uint8_t mask = 0x80; mask; mask >>= 1) {
+    waitcycles(halfbit / 4);
+    if (value & mask) {
+      sdarelease();
+    } else {
+      sdalow();
+    }
+    waitcycles(halfbit - halfbit / 4);
+    if (!releasescl()) {
+      return I2C_STUCK;
+    }
+    waitcycles(halfbit);
+    scllow();
+  }
+  waitcycles(halfbit / 4);
+  sdarelease();
+  waitcycles(halfbit - halfbit / 4);
+  if (!releasescl()) {
+    return I2C_STUCK;
+  }
+  waitcycles(halfbit);
+  bool acknowledged = !sdaread();
+  scllow();
+  return acknowledged ? I2C_OK : I2C_NACK;
+}
+
+void i2cbegin() {
+  i2ccyclesperus = getCpuFrequencyMhz();
+  halfbit = i2ccyclesperus * 1000000UL / I2C_CLOCK / 2;
+
+  pinMode(I2C_SDA, INPUT);
+  pinMode(I2C_SCL, INPUT);
+  sdarelease();
+  sclrelease();
+#ifndef SIMULATE
+  REG_WRITE(GPIO_OUT_W1TC_REG, SDA_MASK | SCL_MASK);
+  // A software restart keeps the GPIO matrix: the pins can still belong to the I2C peripheral
+  // of the firmware before an OTA update, and then they ignore us.
+  REG_WRITE(GPIO_FUNC0_OUT_SEL_CFG_REG + I2C_SDA * 4, SIG_GPIO_OUT_IDX | GPIO_FUNC0_OEN_SEL);
+  REG_WRITE(GPIO_FUNC0_OUT_SEL_CFG_REG + I2C_SCL * 4, SIG_GPIO_OUT_IDX | GPIO_FUNC0_OEN_SEL);
 #endif
-  Wire.beginTransmission(address);
-  Wire.write(reg);
-  Wire.write(content);
-  uint8_t result = Wire.endTransmission();
+
+  // A chip can be left halfway a byte by a reset, it lets go of SDA after some clocks
+  for (uint8_t i = 0; i < 9 && !sdaread(); i++) {
+    scllow();
+    waitcycles(halfbit);
+    releasescl();
+    waitcycles(halfbit);
+  }
+  scllow();
+  i2cstop();
+}
+
+bool IRAM_ATTR i2cwrite(byte address, byte reg, byte content) {
+  uint8_t result = I2C_STUCK;
+  if (i2cstart()) {
+    result = i2cbyte(address << 1);
+    if (result == I2C_OK) {
+      result = i2cbyte(reg);
+    }
+    if (result == I2C_OK) {
+      result = i2cbyte(content);
+    }
+    i2cstop();
+  }
 
   i2cstats.writes++;
-  if (result != 0) {
-    if (result == 2 || result == 3) {
+  if (result != I2C_OK) {
+    if (result == I2C_NACK) {
       i2cstats.nack++;
-    } else if (result == 5) {
-      i2cstats.timeout++;
     } else {
-      i2cstats.other++;
+      i2cstats.timeout++;
     }
     if (content == 0x00 && reg >= 0x06 && reg <= 0x45) {
       i2cstats.offfailed++;
     }
   }
-  return result == 0;
+  return result == I2C_OK;
 }
 
 // An output that stays on burns a coil and its drivers: the PCA9685 has no timeout of its own.
-void i2coff(byte address, byte reg) {
+void IRAM_ATTR i2coff(byte address, byte reg) {
   if (i2cwrite(address, reg, 0x00)) {
     return;
   }
@@ -62,7 +153,7 @@ void i2coff(byte address, byte reg) {
 
 // Bit 4 of ALL_LED_OFF_H switches a whole chip off, All Call reaches every chip at once.
 // The chips themselves get it too, in case one missed it. Only a restart clears this.
-void emergencystop() {
+void IRAM_ATTR emergencystop() {
   if (i2cfault) {
     return;
   }
@@ -80,7 +171,6 @@ void emergencystop() {
       i2cwrite(0x60 + panel * 2 + chip, 0xFD, 0x10);
     }
   }
-  Serial.println("I2C fault: emergency stop, restart needed");
 }
 
 void resetPCA9685() {
@@ -118,19 +208,20 @@ void i2cscanner() {
 
   nDevices = 0;
   for (address = 1; address < 127; address++ ) {
-    // The i2c_scanner uses the return value of
-    // the Write.endTransmisstion to see if
-    // a device did acknowledge to the address.
-    Wire.beginTransmission(address);
-    error = Wire.endTransmission();
+    // A device acknowledges its address
+    error = I2C_STUCK;
+    if (i2cstart()) {
+      error = i2cbyte(address << 1);
+      i2cstop();
+    }
 
     if (error == 0) {
       Serial.print("I2C device found at address 0x");
       Serial.print((address < 0x10) ? "0" : "");
       Serial.println(address, HEX);
       nDevices++;
-    } else if (error == 4) {
-      Serial.print("Unknown error at address 0x");
+    } else if (error == I2C_STUCK) {
+      Serial.print("Bus stuck at address 0x");
       Serial.print((address < 0x10) ? "0" : "");
       Serial.println(address, HEX);
     }

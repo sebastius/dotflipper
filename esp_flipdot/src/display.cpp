@@ -1,8 +1,74 @@
 #include "display.h"
 #include "pca9685.h"
+#include "i2cpins.h"
 
 boolean current_state[COLS][ROWS];
 boolean next_state[COLS][ROWS];
+
+static portMUX_TYPE flipmux = portMUX_INITIALIZER_UNLOCKED;
+
+static void countpulse(uint32_t cycles) {
+  i2cstats.pulses++;
+  i2cstats.pulsetotal += cycles;
+  if (cycles > i2cstats.pulsemax) {
+    i2cstats.pulsemax = cycles;
+  }
+  if (cycles > PULSE_LIMIT_MICROS * i2ccyclesperus) {
+    emergencystop();
+  }
+}
+
+// One pulse on one panel, or at the same time on two when row2 isn't 0. Returns false when
+// a dot might not have flipped.
+// Current flows from the column going on until the row goes off, that time is PULSE_MICROS:
+// it sets the peak current, so it must not depend on anything else. Nothing can interrupt this
+// and it runs from IRAM, so it doesn't matter what else is in the firmware.
+static bool IRAM_ATTR pulse(byte row, byte rowregister, byte column, byte columnregister,
+                            byte row2, byte row2register, byte column2, byte column2register) {
+  const uint32_t length = PULSE_MICROS * i2ccyclesperus;
+
+  portENTER_CRITICAL(&flipmux);
+
+  // Powerup!
+  bool powered = i2cwrite(row, rowregister, 0x10);
+  if (row2) {
+    powered &= i2cwrite(row2, row2register, 0x10);
+  }
+
+  uint32_t before = i2ccycles();
+  powered &= i2cwrite(column, columnregister, 0x10);
+  uint32_t start = i2ccycles();
+  uint32_t writetime = start - before;
+  if (row2) {
+    powered &= i2cwrite(column2, column2register, 0x10);
+  }
+  uint32_t start2 = i2ccycles();
+
+  // A write only takes effect at its end, so start it that much early
+  while (i2ccycles() - start < length - writetime) {
+  }
+
+  // And powerdown! Also after a failed write: failing doesn't prove the chip didn't take it.
+  i2coff(row, rowregister);
+  uint32_t end = i2ccycles();
+  uint32_t end2 = end;
+  if (row2) {
+    i2coff(row2, row2register);
+    end2 = i2ccycles();
+  }
+  i2coff(column, columnregister);
+  if (row2) {
+    i2coff(column2, column2register);
+  }
+
+  portEXIT_CRITICAL(&flipmux);
+
+  countpulse(end - start);
+  if (row2) {
+    countpulse(end2 - start2);
+  }
+  return powered;
+}
 
 void flipdot(uint16_t x, uint16_t y, bool color) {
   // This routine seems a bit convoluted, calculating the addresses for each pixel when you could make a map beforehand.
@@ -41,25 +107,7 @@ void flipdot(uint16_t x, uint16_t y, bool color) {
   byte rowregister =  4 * row + rowregisteroffset;
 
   // Now we will flip some bits!
-  // Powerup!
-  i2cwrite(rowdriveraddress,    rowregister          , 0x10);
-  delayMicroseconds(100);
-  i2cwrite(columndriveraddress, columnregister       , 0x10);
-  delayMicroseconds(100);
-
-  // And powerdown!
-  i2coff(rowdriveraddress,    rowregister);
-  delayMicroseconds(100);
-  i2coff(columndriveraddress, columnregister);
-  delayMicroseconds(100);
-}
-
-static void countpulse(uint32_t cycles) {
-  i2cstats.pulses++;
-  i2cstats.pulsetotal += cycles;
-  if (cycles > i2cstats.pulsemax) {
-    i2cstats.pulsemax = cycles;
-  }
+  pulse(rowdriveraddress, rowregister, columndriveraddress, columnregister, 0, 0, 0, 0);
 }
 
 // Flips every changed dot from current_state to next_state, two panels at a time.
@@ -103,34 +151,9 @@ void fullupdate() {
         byte row2register =  4 * row + row2registeroffset;
 
         // Now we will flip some bits!
-        // Powerup!
-        bool powered = i2cwrite(rowdriveraddress,    rowregister          , 0x10);
-        powered &= i2cwrite(row2driveraddress,    row2register          , 0x10);
+        bool powered = pulse(rowdriveraddress, rowregister, columndriveraddress, columnregister,
+                             row2driveraddress, row2register, column2driveraddress, column2register);
 
-        delayMicroseconds(1);
-
-        powered &= i2cwrite(columndriveraddress, columnregister       , 0x10);
-        uint32_t pulsestart = ESP.getCycleCount();
-        powered &= i2cwrite(column2driveraddress, column2register       , 0x10);
-        uint32_t pulse2start = ESP.getCycleCount();
-
-        delayMicroseconds(1);
-
-        // And powerdown! Also after a failed write: failing doesn't prove the chip didn't take it.
-        i2coff(rowdriveraddress,    rowregister);
-        uint32_t pulseend = ESP.getCycleCount();
-        i2coff(row2driveraddress,    row2register);
-        uint32_t pulse2end = ESP.getCycleCount();
-
-        delayMicroseconds(1);
-
-        i2coff(columndriveraddress, columnregister);
-        i2coff(column2driveraddress, column2register);
-
-        delayMicroseconds(1);
-
-        countpulse(pulseend - pulsestart);
-        countpulse(pulse2end - pulse2start);
         if (!powered) {
           failed[failedcount++] = x * 16 + y;
         }
