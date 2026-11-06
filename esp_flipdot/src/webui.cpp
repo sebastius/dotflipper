@@ -161,7 +161,8 @@ function toast(text) {
 
 function showStatus(state) {
   let text;
-  if (state.status === 'off') text = 'Uit';
+  if (state.status === 'fault') text = 'Storing: noodstop, herstart nodig';
+  else if (state.status === 'off') text = 'Uit';
   else if (state.status === 'clock') text = 'Klok';
   else text = (catalog.find(a => a.id === state.status) || { name: state.status }).name;
   if (state.time && state.status !== 'off') text += ' · ' + state.time.slice(0, 5);

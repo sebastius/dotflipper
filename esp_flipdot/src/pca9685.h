@@ -50,7 +50,12 @@ struct I2CStats {
 
 extern I2CStats i2cstats;
 
-void i2cwrite(byte address, byte reg, byte content);
+// Set by emergencystop(), stays set until a restart. Nothing may flip anymore.
+extern bool i2cfault;
+
+bool i2cwrite(byte address, byte reg, byte content);  // False when the chip didn't take it
+void i2coff(byte address, byte reg);  // Switch an output off, whatever it takes
+void emergencystop();
 void resetPCA9685();
 void everythingoff(uint8_t address);
 void i2cscanner();

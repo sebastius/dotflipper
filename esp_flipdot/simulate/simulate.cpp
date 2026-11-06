@@ -28,10 +28,11 @@ static FILE *trace;
 static uint32_t cycles;
 
 // Fault injection
-static long dropwrite = -1;     // Number of the LED write that gets lost
+static long dropwrite = -1;     // Number of the first LED write that gets lost
+static long droplength = 1;
 static uint8_t dropresult = 2;
 static long ledwrites;
-static int extrarule = 0;       // 1: a bad write sent on purpose, to prove the checks work
+static int deadchip = -1;       // Chip that stopped working altogether
 
 uint32_t FakeESP::getCycleCount() { return cycles; }
 void delayMicroseconds(unsigned int us) {
@@ -40,13 +41,19 @@ void delayMicroseconds(unsigned int us) {
 }
 
 static bool outputs[0x80][16];
+static bool fulloff[0x80];
 static bool dots[PANELS_Y][32][16];
 static long violations;
+static int coilsnow[PANELS_Y];
 static int maxcoils;
 static bool rule1, rule2;
 
 static void violation(const char *text) {
   if (violations++ < 5) printf("    OVERTREDING: %s\n", text);
+}
+
+static bool active(int chip, int channel) {
+  return outputs[chip][channel] && !fulloff[chip];
 }
 
 static bool chipexists(uint8_t a) {
@@ -56,7 +63,7 @@ static bool chipexists(uint8_t a) {
 static void updatemodel() {
   for (int a = 0x40; a < 0x70; a++) {
     for (int ch = 0; ch < 8; ch++) {
-      if (outputs[a][ch] && outputs[a][ch + 8]) {
+      if (active(a, ch) && active(a, ch + 8)) {
         rule1 = true;
         violation("CHn en CHn+8 tegelijk aan: kortsluiting");
       }
@@ -68,14 +75,15 @@ static void updatemodel() {
       uint8_t column = 0x40 + p * 4 + x / 8;
       for (int y = 0; y < 16; y++) {
         uint8_t row = 0x60 + p * 2 + y / 8;
-        bool yellow = outputs[row][8 + y % 8] && outputs[column][x % 8];
-        bool black  = outputs[row][y % 8] && outputs[column][8 + x % 8];
+        bool yellow = active(row, 8 + y % 8) && active(column, x % 8);
+        bool black  = active(row, y % 8) && active(column, 8 + x % 8);
         if (yellow) dots[p][x][y] = true;
         if (black)  dots[p][x][y] = false;
         coils += yellow || black;
       }
     }
     if (coils > maxcoils) maxcoils = coils;
+    coilsnow[p] = coils;
     if (coils > 1) {
       rule2 = true;
       violation("meer dan 1 spoel tegelijk op een paneel");
@@ -85,16 +93,24 @@ static void updatemodel() {
 
 uint8_t TwoWire::endTransmission() {
   cycles += 40 * 240;
-  if (!chipexists(address)) return 2;
+  if (!chipexists(address) || address == deadchip) return 2;
   if (length != 2) return 0;
   uint8_t reg = data[0], value = data[1];
   bool led = reg >= 0x07 && reg <= 0x43 && (reg - 7) % 4 == 0;
   if (trace) fprintf(trace, "write %02X %02X %02X\n", address, reg, value);
   if (led) {
-    if (ledwrites++ == dropwrite) return dropresult;
+    long number = ledwrites++;
+    if (dropwrite >= 0 && number >= dropwrite && number < dropwrite + droplength) return dropresult;
     outputs[address][(reg - 7) / 4] = value == 0x10;
+  } else if (reg == 0xFD && value == 0x10) {
+    if (address == 0x70) {
+      for (int a = 0x40; a < 0x70; a++) if (a != deadchip) fulloff[a] = true;
+    } else {
+      fulloff[address] = true;
+    }
   } else if (reg == 0xFD || reg == 0xFB) {
     memset(outputs[address], 0, 16);
+    fulloff[address] = false;
   }
   updatemodel();
   return 0;
@@ -103,7 +119,7 @@ uint8_t TwoWire::endTransmission() {
 static bool alloff() {
   for (int a = 0x40; a < 0x70; a++)
     for (int ch = 0; ch < 16; ch++)
-      if (outputs[a][ch]) return false;
+      if (active(a, ch)) return false;
   return true;
 }
 
@@ -122,8 +138,12 @@ static void randomframe(int percent) {
 
 static void start() {
   memset(outputs, 0, sizeof(outputs));
+  memset(fulloff, 0, sizeof(fulloff));
   violations = 0; maxcoils = 0; rule1 = rule2 = false;
-  ledwrites = 0; dropwrite = -1;
+  ledwrites = 0; dropwrite = -1; droplength = 1; deadchip = -1;
+#ifdef HAS_FAULT
+  i2cfault = false;
+#endif
   resetPCA9685();
   YellowScreen();
   ClearScreen();
@@ -184,20 +204,57 @@ int main(int argc, char **argv) {
   Wire.beginTransmission(0x40); Wire.write(0x0B); Wire.write(0x10); Wire.endTransmission();
   check("Twee spoelen tegelijk worden herkend", rule2, &failures);
 
-  printf("Verloren 'uit'-write (hoort nu nog fout te gaan, en geteld te worden)\n");
+#ifdef HAS_FAULT
+  printf("Elke write van een puls mislukt een keer\n");
+  const char *names[8] = { "rij aan", "rij 2 aan", "kolom aan", "kolom 2 aan", "rij uit", "rij 2 uit", "kolom uit", "kolom 2 uit" };
+  for (int position = 0; position < 8; position++) {
+    start();
+    violations = 0;
+    long base = ledwrites;
+    for (int x = 0; x < COLS; x++) for (int y = 0; y < ROWS; y++) next_state[x][y] = true;
+    dropwrite = base + position;
+    fullupdate();
+    bool safe = alloff() && !rule1 && !rule2 && !i2cfault;
+    fullupdate();  // A failed dot is flipped again by the next update
+    char text[80];
+    snprintf(text, sizeof(text), "%s: veilig, geen noodstop, beeld hersteld", names[position]);
+    check(text, safe && matches(), &failures);
+  }
+
+  printf("Blijvende storing\n");
+  for (int position = 4; position < 8; position++) {
+    start();
+    long base = ledwrites;
+    for (int x = 0; x < COLS; x++) for (int y = 0; y < ROWS; y++) next_state[x][y] = true;
+    dropwrite = base + position;
+    droplength = 4;  // First try and all the retries
+    fullupdate();
+    long after = ledwrites;
+    fullupdate();
+    flipdot(1, 1, 1);
+    char text[80];
+    snprintf(text, sizeof(text), "%s lukt niet: noodstop, alles uit, er flipt niets meer", names[position]);
+    check(text, i2cfault && alloff() && ledwrites == after && coilsnow[0] == 0 && coilsnow[1] == 0, &failures);
+  }
+
+  printf("Een chip valt helemaal uit\n");
+  for (int chip : { 0x60, 0x40 }) {
+    start();
+    for (int x = 0; x < COLS; x++) for (int y = 0; y < ROWS; y++) next_state[x][y] = true;
+    Wire.beginTransmission(chip == 0x60 ? 0x60 : 0x40);
+    Wire.write(chip == 0x60 ? 0x27 : 0x07); Wire.write(0x10);
+    Wire.endTransmission();  // The chip dies with this output on
+    deadchip = chip;
+    fullupdate();
+    char text[80];
+    snprintf(text, sizeof(text), "Chip 0x%02X dood met uitgang aan: noodstop, geen spoelstroom", chip);
+    check(text, i2cfault && coilsnow[0] == 0 && coilsnow[1] == 0, &failures);
+  }
+#else
   start();
-  long base = ledwrites;
   for (int x = 0; x < COLS; x++) for (int y = 0; y < ROWS; y++) next_state[x][y] = true;
-  dropwrite = base + 4;  // Fifth write of the first dot: first row off
-  dropresult = 2;
-#ifdef HAS_STATS
-  i2cstats = {};
-#endif
+  dropwrite = ledwrites + 4;
   fullupdate();
-  check("Model ziet dat er een uitgang blijft hangen", !alloff() || violations > 0, &failures);
-#ifdef HAS_STATS
-  printf("  nack=%u off_failed=%u\n", i2cstats.nack, i2cstats.offfailed);
-  check("Teller off_failed staat op 1", i2cstats.offfailed == 1 && i2cstats.nack == 1, &failures);
 #endif
 
   printf(failures ? "\nMISLUKT: %d fout(en)\n" : "\nAlles goed\n", failures);

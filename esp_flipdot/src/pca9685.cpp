@@ -3,9 +3,12 @@
 #include "config.h"
 #include "pca9685.h"
 
-I2CStats i2cstats;
+#define I2C_OFF_RETRIES 3
 
-void i2cwrite(byte address, byte reg, byte content) {
+I2CStats i2cstats;
+bool i2cfault = false;
+
+bool i2cwrite(byte address, byte reg, byte content) {
 #ifdef DEBUG
   Serial.print("I2C: ");
   if (address < 0x10) {
@@ -41,6 +44,43 @@ void i2cwrite(byte address, byte reg, byte content) {
       i2cstats.offfailed++;
     }
   }
+  return result == 0;
+}
+
+// An output that stays on burns a coil and its drivers: the PCA9685 has no timeout of its own.
+void i2coff(byte address, byte reg) {
+  if (i2cwrite(address, reg, 0x00)) {
+    return;
+  }
+  for (uint8_t i = 0; i < I2C_OFF_RETRIES; i++) {
+    if (i2cwrite(address, reg, 0x00)) {
+      return;
+    }
+  }
+  emergencystop();
+}
+
+// Bit 4 of ALL_LED_OFF_H switches a whole chip off, All Call reaches every chip at once.
+// The chips themselves get it too, in case one missed it. Only a restart clears this.
+void emergencystop() {
+  if (i2cfault) {
+    return;
+  }
+  i2cfault = true;
+  for (uint8_t i = 0; i < I2C_OFF_RETRIES; i++) {
+    if (i2cwrite(0x70, 0xFD, 0x10)) {
+      break;
+    }
+  }
+  for (uint8_t panel = 0; panel < PANELS_X * PANELS_Y; panel++) {
+    for (uint8_t chip = 0; chip < 4; chip++) {
+      i2cwrite(0x40 + panel * 4 + chip, 0xFD, 0x10);
+    }
+    for (uint8_t chip = 0; chip < 2; chip++) {
+      i2cwrite(0x60 + panel * 2 + chip, 0xFD, 0x10);
+    }
+  }
+  Serial.println("I2C fault: emergency stop, restart needed");
 }
 
 void resetPCA9685() {

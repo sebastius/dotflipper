@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
 
-g++ -std=c++17 -O1 -DHAS_STATS -I. -I../src simulate.cpp ../src/display.cpp ../src/pca9685.cpp -o "$out/new"
+g++ -std=c++17 -O1 -DHAS_STATS -DHAS_FAULT -I. -I../src simulate.cpp ../src/display.cpp ../src/pca9685.cpp -o "$out/new"
 "$out/new" "$out/new.trace"
 
 if [ -n "$1" ]; then

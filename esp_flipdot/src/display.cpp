@@ -8,6 +8,10 @@ void flipdot(uint16_t x, uint16_t y, bool color) {
   // This routine seems a bit convoluted, calculating the addresses for each pixel when you could make a map beforehand.
   // However the math takes up < 1ms for 8 panels in total (64x64 sets of calculations) on an 80mhz ESP8266.
 
+  if (i2cfault) {
+    return;
+  }
+
   // Input sanitation. Out of range? We wrap around.
   // Sanitation is needed because this panel is headed for hacker-events...
   // Stuff will break (actual short circuits, blown chips, coils and diodes) when addressing is wrong.
@@ -44,9 +48,9 @@ void flipdot(uint16_t x, uint16_t y, bool color) {
   delayMicroseconds(100);
 
   // And powerdown!
-  i2cwrite(rowdriveraddress,    rowregister          , 0x00);
+  i2coff(rowdriveraddress,    rowregister);
   delayMicroseconds(100);
-  i2cwrite(columndriveraddress, columnregister       , 0x00);
+  i2coff(columndriveraddress, columnregister);
   delayMicroseconds(100);
 }
 
@@ -61,12 +65,19 @@ static void countpulse(uint32_t cycles) {
 // Flips every changed dot from current_state to next_state, two panels at a time.
 // Only works on two panels stacked on top of each other!
 void fullupdate() {
+  static uint16_t failed[32 * 16];  // Dots that didn't get their pulse, as x * 16 + y
+  uint16_t failedcount = 0;
+
 #ifdef DEBUG
   unsigned long starttijd = millis();
 #endif
 
   for (uint8_t x = 0; x < 32; x++) {
     for (uint8_t y = 0; y < 16; y++) {
+
+      if (i2cfault) {
+        return;
+      }
 
       if ((current_state[x][y] != next_state[x][y]) || (current_state[x][y + 16] != next_state[x][y + 16])) {
 
@@ -93,33 +104,36 @@ void fullupdate() {
 
         // Now we will flip some bits!
         // Powerup!
-        i2cwrite(rowdriveraddress,    rowregister          , 0x10);
-        i2cwrite(row2driveraddress,    row2register          , 0x10);
+        bool powered = i2cwrite(rowdriveraddress,    rowregister          , 0x10);
+        powered &= i2cwrite(row2driveraddress,    row2register          , 0x10);
 
         delayMicroseconds(1);
 
-        i2cwrite(columndriveraddress, columnregister       , 0x10);
+        powered &= i2cwrite(columndriveraddress, columnregister       , 0x10);
         uint32_t pulsestart = ESP.getCycleCount();
-        i2cwrite(column2driveraddress, column2register       , 0x10);
+        powered &= i2cwrite(column2driveraddress, column2register       , 0x10);
         uint32_t pulse2start = ESP.getCycleCount();
 
         delayMicroseconds(1);
 
-        // And powerdown!
-        i2cwrite(rowdriveraddress,    rowregister          , 0x00);
+        // And powerdown! Also after a failed write: failing doesn't prove the chip didn't take it.
+        i2coff(rowdriveraddress,    rowregister);
         uint32_t pulseend = ESP.getCycleCount();
-        i2cwrite(row2driveraddress,    row2register          , 0x00);
+        i2coff(row2driveraddress,    row2register);
         uint32_t pulse2end = ESP.getCycleCount();
 
         delayMicroseconds(1);
 
-        i2cwrite(columndriveraddress, columnregister       , 0x00);
-        i2cwrite(column2driveraddress, column2register       , 0x00);
+        i2coff(columndriveraddress, columnregister);
+        i2coff(column2driveraddress, column2register);
 
         delayMicroseconds(1);
 
         countpulse(pulseend - pulsestart);
         countpulse(pulse2end - pulse2start);
+        if (!powered) {
+          failed[failedcount++] = x * 16 + y;
+        }
       }
     }
   }
@@ -128,6 +142,13 @@ void fullupdate() {
   Serial.println(eindtijd - starttijd);
 #endif
   memcpy(current_state, next_state, sizeof(next_state));
+
+  // We don't know what these dots show, so the next update flips them again
+  for (uint16_t i = 0; i < failedcount; i++) {
+    uint8_t x = failed[i] / 16, y = failed[i] % 16;
+    current_state[x][y] = !next_state[x][y];
+    current_state[x][y + 16] = !next_state[x][y + 16];
+  }
 }
 
 // Sets a dot in next_state, dots outside the screen are ignored.
