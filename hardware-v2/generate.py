@@ -7,18 +7,21 @@ drawing them. Every pin gets a net label: the schematic reads as a netlist, not 
 
 import os
 import re
+import sys
 import uuid
 
 SYMBOLS = '/usr/share/kicad/symbols/'
-PROJECT = 'dotflipper2'
+LIBRARY = 'dotflipper2'
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, 'kicad')
+TEST_BOARD = 'proef' in sys.argv  # One driver on 16 dots, to test everything before the big board
+PROJECT = 'dotflipper2-proef' if TEST_BOARD else 'dotflipper2'
+OUT = os.path.join(HERE, 'kicad-proef' if TEST_BOARD else 'kicad')
 
 R0603 = 'Resistor_SMD:R_0603_1608Metric'
 C0603 = 'Capacitor_SMD:C_0603_1608Metric'
 C0805 = 'Capacitor_SMD:C_0805_2012Metric'
 C1206 = 'Capacitor_SMD:C_1206_3216Metric'
-DRV_FOOTPRINT = 'Package_SO:HTSSOP-24-1EP_4.4x7.8mm_P0.65mm_EP3.4x7.8mm_Mask2.4x4.68mm_ThermalVias'
+DRV_FOOTPRINT = 'dotflipper2:DRV8912_PWP'  # KiCad's copper, with the mask opening TI asks for
 
 POWER = {'GND': 'GND', '+3V3': '+3V3', '+5V': '+5V'}
 
@@ -113,7 +116,7 @@ def custom_drv8912():
            + '(symbol "DRV8912-Q1_0_1" (rectangle (start -12.7 %.2f) (end 12.7 %.2f) '
              '(stroke (width 0.254) (type default)) (fill (type background))))\n' % (height / 2, -height / 2)
            + '(symbol "DRV8912-Q1_1_1"\n' + pins + ')\n)')
-    return Symbol(PROJECT, 'DRV8912-Q1', raw), raw
+    return Symbol(LIBRARY, 'DRV8912-Q1', raw), raw
 
 
 class Sheet:
@@ -147,6 +150,11 @@ class Sheet:
         for tip, (net, angle, kind) in tips.items():
             self.items.append(('net', net, tip[0], tip[1], angle, kind))
 
+    def passive_single(self, symbol, ref, value, net, footprint=''):
+        column, row = self.slot % 7, self.slot // 7
+        self.slot += 1
+        self.place(symbol, ref, value, 40.64 + column * 50.8, self.grid_y + row * 25.4, {symbol.pins[0]['number']: net}, footprint=footprint)
+
     def passive(self, symbol, ref, value, net1, net2, footprint='', mpn=''):
         """Two pin parts go in a grid at the bottom of the sheet."""
         column, row = self.slot % 7, self.slot // 7
@@ -168,7 +176,7 @@ def build():
     power = Sheet('power', 'Voeding')
     safety = Sheet('safety', 'Hardware-beveiliging')
     mcu = Sheet('mcu', 'ESP32-S3')
-    panels = [Sheet('panel0', 'Paneel 0'), Sheet('panel1', 'Paneel 1')]
+    panels = [Sheet('panel0', 'Paneel 0')] if TEST_BOARD else [Sheet('panel0', 'Paneel 0'), Sheet('panel1', 'Paneel 1')]
 
     # Power: 20 V in, 5 V from a buck or USB, so the logic also runs with the 20 V off
     power.grid_y = 139.7
@@ -245,10 +253,11 @@ def build():
     # MCU
     mcu.grid_y = 165.1
     esp = load_symbol('RF_Module', 'ESP32-S3-WROOM-1')
+    second_bus = {} if TEST_BOARD else {'IO4': 'SCLK1', 'IO5': 'MOSI1', 'IO6': 'MISO1', 'IO7': 'CS1'}
     mcu.place(esp, 'U7', 'ESP32-S3-WROOM-1-N8', 101.6, 76.2, {
+        **second_bus,
         '3V3': '+3V3', 'GND': 'GND', 'EN': 'ESP_EN', 'IO0': 'BOOT',
         'IO12': 'SCLK0', 'IO11': 'MOSI0', 'IO13': 'MISO0', 'IO10': 'CS0',
-        'IO4': 'SCLK1', 'IO5': 'MOSI1', 'IO6': 'MISO1', 'IO7': 'CS1',
         'IO15': 'ENABLE', 'IO16': 'TRIP_CLEAR', 'IO17': 'NFAULT', 'IO18': 'TRIPPED',
         'IO1': 'ISENSE', 'IO2': 'LED',
         'USB_D-': 'USB_DN', 'USB_D+': 'USB_DP',
@@ -285,20 +294,30 @@ def build():
         sides = [[f'P{p}_X1_{n}' for n in range(1, 33)],
                  [f'P{p}_X2_{n}' for n in range(1, 17)] + [f'P{p}_X3_{n}' for n in range(1, 17)]]
         chips = [sides[0][0:12], sides[0][12:24], sides[0][24:32], sides[1][0:12], sides[1][12:24], sides[1][24:32]]
+        if TEST_BOARD:
+            chips = [sides[0][0:4] + [f'P{p}_X3_{n}' for n in range(1, 9)]]
         for i, outputs in enumerate(chips):
             x, y = 76.2 + (i % 3) * 114.3, 63.5 + (i // 3) * 76.2
             conns = {'VM': 'VM', 'VDD': '+3V3', 'GND': 'GND', 'EP': 'GND', 'SCLK': f'SCLK{p}', 'nSCS': f'CS{p}',
                      'nSLEEP': 'NSLEEP', 'nFAULT': 'NFAULT',
                      'SDI': f'MOSI{p}' if i == 0 else f'CHAIN{p}_{i}',
-                     'SDO': f'MISO{p}' if i == 5 else f'CHAIN{p}_{i + 1}'}
+                     'SDO': f'MISO{p}' if i == len(chips) - 1 else f'CHAIN{p}_{i + 1}'}
             for n, net in enumerate(outputs):
                 conns[f'OUT{n + 1}'] = net
             sheet.place(drv, f'U{base + i + 1}', 'DRV8912-Q1', x, y, conns, footprint=DRV_FOOTPRINT)
-        pins = {str(n): f'P{p}_X1_{n}' for n in range(1, 33)}
-        sheet.place(x1, f'J{base + 1}', 'X1', 76.2, 241.3, pins, footprint=header34)
-        sheet.place(x23, f'J{base + 2}', 'X2', 190.5, 241.3, {str(n): f'P{p}_X2_{n}' for n in range(1, 17)}, footprint=header16)
-        sheet.place(x23, f'J{base + 3}', 'X3', 304.8, 241.3, {str(n): f'P{p}_X3_{n}' for n in range(1, 17)}, footprint=header16)
-        for i in range(6):
+        wired = {net for outputs in chips for net in outputs}
+        pins = lambda name, count: {str(n): f'P{p}_{name}_{n}' for n in range(1, count + 1) if f'P{p}_{name}_{n}' in wired}
+        sheet.place(x1, f'J{base + 1}', 'X1', 76.2, 241.3, pins('X1', 32), footprint=header34)
+        if not TEST_BOARD:
+            sheet.place(x23, f'J{base + 2}', 'X2', 190.5, 241.3, pins('X2', 16), footprint=header16)
+        sheet.place(x23, f'J{base + 3}', 'X3', 304.8, 241.3, pins('X3', 16), footprint=header16)
+        if TEST_BOARD:
+            # Not on the big board: 10 uF on VM as the datasheet asks, leave out to test without it
+            sheet.passive(cap, f'C{base + 90}', 'DNP 10uF 50V', 'VM', 'GND', footprint=C1206)
+            point = load_symbol('Connector', 'TestPoint')
+            for n, net in enumerate(('ISENSE', 'TIMER', 'TRIP_CLK', 'NSLEEP', 'VM', 'VM_SW', 'GND', 'SCLK0')):
+                sheet.passive_single(point, f'TP{n + 1}', net, net, footprint='TestPoint:TestPoint_Pad_D1.5mm')
+        for i in range(len(chips)):
             n = base + i * 4
             sheet.passive(cap, f'C{n + 1}', '100nF 50V', 'VM', 'GND', footprint=C0603)
             sheet.passive(cap, f'C{n + 2}', '100nF 50V', 'VM', 'GND', footprint=C0603)
@@ -414,10 +433,12 @@ def main():
         f.write(f'(kicad_sch (version {version}) (generator "dotflipper2") (generator_version "10.0")\n'
                 f'(uuid "{root}") (paper "A3") (title_block (title "Dotflipper v2"))\n(lib_symbols)\n'
                 + '\n'.join(blocks) + '\n(sheet_instances (path "/" (page "1")))\n)\n')
-    with open(os.path.join(OUT, PROJECT + '.kicad_sym'), 'w') as f:
+    with open(os.path.join(OUT, LIBRARY + '.kicad_sym'), 'w') as f:
         f.write(f'(kicad_symbol_lib (version {version}) (generator "dotflipper2") (generator_version "10.0")\n{drv_raw}\n)\n')
     with open(os.path.join(OUT, 'sym-lib-table'), 'w') as f:
-        f.write(f'(sym_lib_table (version 7)\n(lib (name "{PROJECT}")(type "KiCad")(uri "${{KIPRJMOD}}/{PROJECT}.kicad_sym")(options "")(descr ""))\n)\n')
+        f.write(f'(sym_lib_table (version 7)\n(lib (name "{LIBRARY}")(type "KiCad")(uri "${{KIPRJMOD}}/{LIBRARY}.kicad_sym")(options "")(descr ""))\n)\n')
+    with open(os.path.join(OUT, 'fp-lib-table'), 'w') as f:
+        f.write(f'(fp_lib_table (version 7)\n(lib (name "{LIBRARY}")(type "KiCad")(uri "${{KIPRJMOD}}/../footprints/{LIBRARY}.pretty")(options "")(descr ""))\n)\n')
     with open(os.path.join(OUT, PROJECT + '.kicad_pro'), 'w') as f:
         f.write('{"meta": {"filename": "%s.kicad_pro", "version": 3}}\n' % PROJECT)
     print('Klaar:', ', '.join(s.name for s in sheets))

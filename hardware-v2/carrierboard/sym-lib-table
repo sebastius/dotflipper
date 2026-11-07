@@ -1,0 +1,4 @@
+(sym_lib_table
+	(version 7)
+	(lib (name "carrierboard") (type "KiCad") (uri "${KIPRJMOD}/carrierboard.kicad_sym") (options "") (descr "Onderdelen van het carrierboard"))
+)

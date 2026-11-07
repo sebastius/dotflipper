@@ -1,6 +1,6 @@
 # Dotflipper v2: ontwerpnotitie
 
-Status: concept, nog niet nagekeken. Eerste schema staat in `kicad/`, nog geen PCB.
+Status: concept, nog niet nagekeken. Schema en autogeroute PCB, nog niet nagekeken en nog niet besteld.
 
 ## Doel
 
@@ -115,16 +115,35 @@ Twee SPI-ketens, één per paneel, zodat beide tegelijk schakelen. Per commando 
 is ongeveer 20 us, plus 3 tot 10 us vertraging. Per dotpaar dus ongeveer de puls plus 60 us.
 Bij 224 us is dat 0,28 ms, ongeveer 3 keer sneller dan v1. De puls kan pas korter na meting.
 
-## Eerste test vóór we een bord bestellen
+## Proefbord
 
-Een DRV8912-evaluatiebord of los proefbordje op één lijn van een paneel, om te meten:
-piekstroom, minimale puls voor een betrouwbare flip, gedrag van de spanningspiek, en of de
-overstroombeveiliging niet onterecht aanspreekt.
+Voordat het grote bord wordt besteld: `kicad-proef/`, 110 x 100 mm. Dezelfde voeding, beveiliging en
+ESP32-S3, maar 1 DRV8912 op 16 dots (lijnen 1-4 van X1, de eerste 4 lijnen op X3). Meten:
+
+- piekstroom en de minimale puls voor een betrouwbare flip;
+- spanningspieken bij uitschakelen;
+- of de timer en latch doen wat ze moeten, en niet onterecht uitschakelen bij snel flippen;
+- verschil zonder en met de optionele 10 uF op VM (C190, standaard niet geplaatst), met meetpunten TP1 tot TP8.
+
+## PCB
+
+6 lagen: F.Cu signaal, In1 GND, In2 +3V3, In3 VM, In4 GND, B.Cu signaal. Met 4 lagen werden de pours
+op de buitenlagen door signalen in eilandjes geknipt, op 6 lagen heeft elk voedingsnet een heel vlak.
+
+Vaste verbindingen vóór het routen (`fanout.py`): massapinnen van de drivers direct naar de thermal
+pad, VM en VDD met een eigen via, de kleine chips ook. De router legt alleen signalen (Freerouting),
+`stitch.py` zet daarna per overgebleven pad een via naar zijn vlak.
+
+Punten om na te kijken bij een echte bestelling: de shunt is niet Kelvin aangesloten, USB is niet op
+impedantie gerout, en de bufferelco staat ver van de drivers (via het VM-vlak).
 
 ## Bestanden
 
 - `generate.py` maakt het KiCad-project in `kicad/`.
 - `check.py` controleert het netlist op de eisen in dit document. ERC alleen is niet genoeg.
+- `build.sh proef|groot` maakt het hele bord: `pcb.py`, `route.py`, `stitch.py`. **Dit begint opnieuw:
+  routing met de hand gaat dan verloren.** Nodig: Java en `~/.local/share/freerouting/freerouting-2.5.0.jar`.
+- `footprints/` bevat de DRV8912-footprint: KiCad's koper met TI's maskeropening (2,94 x 4,06 mm).
 
     python3 generate.py
     kicad-cli sch export netlist --format kicadsexpr -o /tmp/netlist.net kicad/dotflipper2.kicad_sch
@@ -134,7 +153,6 @@ Wijzig het schema in `generate.py`, niet in KiCad: de bestanden in `kicad/` word
 
 ## Open punten
 
-- Footprint DRV8912: de maat van de thermal pad van TI's PWP-behuizing nog vergelijken met de KiCad-footprint.
 - Onderdeelnummers (MPN, LCSC) zijn nog niet toegewezen, ook de footprints van L1, F1 en J1 zijn een eerste keuze.
 - De timer en comparatoren zijn berekend, niet gesimuleerd of getest.
 
