@@ -1,4 +1,0 @@
-(fp_lib_table
-	(version 7)
-	(lib (name "carrierboard") (type "KiCad") (uri "${KIPRJMOD}/carrierboard.pretty") (options "") (descr "Onderdelen van het carrierboard"))
-)

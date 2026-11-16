@@ -28,8 +28,8 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(os.path.dirname(HERE), 'hardware-v2'))
-import generate as schematic  # noqa: E402  The schematic helpers of v2
+sys.path.insert(0, HERE)
+import schematic  # noqa: E402  The schematic helpers
 
 import pcbnew  # noqa: E402
 
