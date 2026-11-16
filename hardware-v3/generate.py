@@ -701,7 +701,7 @@ CENTRES = {
     'U28': (100, 71, 90), 'C18': (90, 75.5, 90), 'RN15': (89.5, 70, 0), 'RN13': (110, 68.5, 0), 'RN14': (110, 73, 0),
     'U29': (114.5, 76, 0), 'C19': (110, 77, 0), 'JP1': (175, 69, 0),
 }
-HOLES = ((3.5, 3.5), (3.5, HEIGHT - 3.5), (WIDTH - 3.5, HEIGHT - 3.5))
+HOLES = ((3.5, 3.5), (3.5, HEIGHT - 3.5), (WIDTH - 3.5, HEIGHT - 3.5), (WIDTH - 3.5, 3.5))
 
 
 def places():
@@ -799,6 +799,19 @@ def update_board():
         if ref not in parts and not ref.startswith('H') and not footprint.IsBoardOnly():
             board.Remove(footprint)
             removed.append(ref)
+    # Mounting holes: add the ones missing, their reference only on the fab layer
+    holes = {f.GetReference(): f for f in board.GetFootprints() if re.match(r'H\d+$', f.GetReference())}
+    for i, (x, y) in enumerate(HOLES, start=1):
+        if f'H{i}' not in holes:
+            hole = load('MountingHole:MountingHole_3.2mm_M3')
+            hole.SetReference(f'H{i}')
+            hole.SetBoardOnly(True)
+            hole.SetPosition(pcbnew.VECTOR2I(MM(x), MM(y)))
+            board.Add(hole)
+            holes[f'H{i}'] = hole
+            added.append(f'H{i}')
+    for hole in holes.values():
+        hole.Reference().SetLayer(pcbnew.F_Fab)
     orphans = sorted({t.GetNetname() for t in board.GetTracks() if t.GetNetname() and t.GetNetname() not in infos})
     pcbnew.SaveBoard(path, board, True)
     print('PCB bijgewerkt. Nieuw:', ', '.join(added) or '-', '| weg:', ', '.join(removed) or '-',
@@ -832,6 +845,7 @@ def write_board():
     for i, (x, y) in enumerate(HOLES, start=1):
         hole = load('MountingHole:MountingHole_3.2mm_M3')
         hole.SetReference(f'H{i}')
+        hole.Reference().SetLayer(pcbnew.F_Fab)  # No text for a hole on the silkscreen
         hole.SetBoardOnly(True)
         hole.SetPosition(pcbnew.VECTOR2I(MM(x), MM(y)))
         board.Add(hole)
