@@ -545,6 +545,44 @@
       },
       {
         "bus_width": 12,
+        "clearance": 0.15,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "5V",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 1,
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "track_width": 0.4,
+        "tuning_profile": "",
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.15,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Spoel",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 2,
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "track_width": 0.3,
+        "tuning_profile": "",
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
         "clearance": 0.2,
         "diff_pair_gap": 0.25,
         "diff_pair_via_gap": 0.25,
@@ -560,25 +598,6 @@
         "tuning_profile": "",
         "via_diameter": 0.8,
         "via_drill": 0.4,
-        "wire_width": 6
-      },
-      {
-        "bus_width": 12,
-        "clearance": 0.15,
-        "diff_pair_gap": 0.25,
-        "diff_pair_via_gap": 0.25,
-        "diff_pair_width": 0.2,
-        "line_style": 0,
-        "microvia_diameter": 0.3,
-        "microvia_drill": 0.1,
-        "name": "Spoel",
-        "pcb_color": "rgba(0, 0, 0, 0.000)",
-        "priority": 1,
-        "schematic_color": "rgba(0, 0, 0, 0.000)",
-        "track_width": 0.3,
-        "tuning_profile": "",
-        "via_diameter": 0.6,
-        "via_drill": 0.3,
         "wire_width": 6
       }
     ],
@@ -602,14 +621,6 @@
       },
       {
         "netclass": "Voeding",
-        "pattern": "+5V"
-      },
-      {
-        "netclass": "Voeding",
-        "pattern": "ESP_5V"
-      },
-      {
-        "netclass": "Voeding",
         "pattern": "/SW"
       },
       {
@@ -623,6 +634,14 @@
       {
         "netclass": "Spoel",
         "pattern": "/X3_*"
+      },
+      {
+        "netclass": "5V",
+        "pattern": "+5V"
+      },
+      {
+        "netclass": "5V",
+        "pattern": "ESP_5V"
       }
     ]
   },
