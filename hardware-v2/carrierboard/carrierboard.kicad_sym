@@ -27,7 +27,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "carrierboard:DRV8912_Breakout"
+		(property "Footprint" "carrierboard:DRV8912_Breakout_ChipDown"
 			(at 0 0 0)
 			(hide yes)
 			(effects

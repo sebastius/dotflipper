@@ -3075,6 +3075,17 @@
 				(justify left)
 			)
 		)
+		(property "LCSC" "C89632"
+			(at 142.24 27.9399 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(property "Value" "10uF 50V"
 			(at 142.24 30.4799 0)
 			(show_name no)
@@ -3235,6 +3246,17 @@
 				(justify left)
 			)
 		)
+		(property "LCSC" "C14663"
+			(at 121.92 27.9399 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(property "Value" "100nF 50v"
 			(at 121.92 30.4799 0)
 			(show_name no)
@@ -3315,6 +3337,17 @@
 					(size 1.27 1.27)
 				)
 				(justify left)
+			)
+		)
+		(property "LCSC" "C14663"
+			(at 91.44 26.6699 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
 			)
 		)
 		(property "Value" "100nF 50v"
@@ -3460,9 +3493,9 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
-		(in_pos_files yes)
+		(in_pos_files no)
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "836f1d68-1dee-445f-832d-920c25530abf")
@@ -3648,9 +3681,9 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
-		(in_pos_files yes)
+		(in_pos_files no)
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "90a02e91-a8cc-4397-a1f0-68e1656b77aa")
@@ -4077,6 +4110,17 @@
 			(effects
 				(font
 					(size 1.524 1.524)
+				)
+			)
+		)
+		(property "LCSC" "C1855817"
+			(at 128.27 45.72 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
 				)
 			)
 		)
@@ -4776,6 +4820,17 @@
 					(size 1.27 1.27)
 				)
 				(justify left)
+			)
+		)
+		(property "LCSC" "C15849"
+			(at 71.12 25.3999 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
 			)
 		)
 		(property "Value" "1uF 50v"
