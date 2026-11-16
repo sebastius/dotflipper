@@ -58,14 +58,15 @@ J1 = ['3V3', '3V3', 'RST', 'IO4', 'IO5', 'IO6', 'IO7', 'IO15', 'IO16', 'IO17', '
 J3 = ['GND', 'TX', 'RX', 'IO1', 'IO2', 'IO42', 'IO41', 'IO40', 'IO39', 'IO38', 'IO37', 'IO36', 'IO35', 'IO0',
       'IO45', 'IO48', 'IO47', 'IO21', 'IO20', 'IO19', 'GND', 'GND']
 # FSPI pins on J1 15-20 next to each other. No strapping, USB, UART or PSRAM pins
-ESP = {'IO9': 'nOE_IN', 'IO10': 'LATCH_IN', 'IO11': 'DATA_IN', 'IO12': 'SCLK_IN', 'IO13': 'MISO', 'IO14': 'DIR_X1_IN',
+ESP = {'IO4': 'ISENSE_ADC', 'IO9': 'nOE_IN', 'IO10': 'LATCH_IN', 'IO11': 'DATA_IN', 'IO12': 'SCLK_IN', 'IO13': 'MISO', 'IO14': 'DIR_X1_IN',
        'IO8': 'DIR_ROW_IN', '5V': 'ESP_5V', 'GND': 'GND'}
 
 LCSC = {}  # Filled per reference in build(): only the SMD parts, JLCPCB can place those
-PARTS = {'100nF': 'C14663', '10uF 50V': 'C13585', '22uF 25V': 'C12891', '470uF 35V': 'C46550413',
+PARTS = {'100nF': 'C14663', '10uF 50V': 'C13585', '22uF 25V': 'C12891', '220uF 50V': 'C46550417',
          '10k': 'C25804', '20k': 'C4184', '100k': 'C25803', '4x10k': 'C29718', 'SS14': 'C2480', '3A': 'C182445',
          '74HC595': 'C5947', '74HC32': 'C5632', '74HC14': 'C5605', 'XL62783': 'C556260', 'ULN2803A': 'C845537',
-         '74AHCT541': 'C2682058', 'AP63205WU': 'C2071056', '4.7uH': 'C57269', '74LVC1G79': 'C42878', '4x1k': 'C20197'}
+         '74AHCT541': 'C2682058', 'AP63205WU': 'C2071056', '4.7uH': 'C57269', '74LVC1G79': 'C42878', '4x1k': 'C20197',
+         'INA180A2': 'C192764', '0.1R 1%': 'C25334'}
 SO20W = 'Package_SO:SOIC-20W_7.5x12.8mm_P1.27mm'
 SOT235 = 'Package_TO_SOT_SMD:SOT-23-5'
 
@@ -203,6 +204,11 @@ class Drawn:
         self.body.append(f'(label "{name}" (at {x:.2f} {y:.2f} 0) (effects (font (size 1.27 1.27)) (justify left bottom)) '
                          f'(uuid "{schematic.uid(self.file, "label", *key)}"))')
 
+    def global_label(self, name, x, y, angle):
+        justify = 'right' if angle in (180, 270) else 'left'
+        self.body.append(f'(global_label "{name}" (shape passive) (at {x:.2f} {y:.2f} {angle}) (effects (font (size 1.27 1.27)) (justify {justify})) '
+                         f'(uuid "{schematic.uid(self.file, "glabel", name, x, y)}"))')
+
     def vm(self, x, y, angle):
         justify = 'right' if angle in (180, 270) else 'left'
         self.body.append(f'(global_label "VM" (shape input) (at {x:.2f} {y:.2f} {angle}) (effects (font (size 1.27 1.27)) (justify {justify})) '
@@ -293,7 +299,10 @@ def group_sheet(kind, instances, root, version):
         d.power('+5V', *c('1'))
         d.power('GND', *c('2'))
         d.vm(x_drv, y_drv + 12.7, 270) if side == 'H' else d.vm(x_drv + 10.16, y_drv + 7.62, 0)
-        d.power('GND', x_drv, y_drv - (15.24 if side == 'H' else 17.78), 180)
+        if side == 'H':
+            d.power('GND', x_drv, y_drv - 15.24, 180)
+        else:  # The ULN returns the coil current to ground through the shunt of the current measurement
+            d.global_label('GND_ULN', x_drv, y_drv - 17.78, 90)
         if side == 'H':
             qh = chip("QH'")
             d.wire(qh, (91.44, qh[1]), (91.44, 104.14))
@@ -512,7 +521,9 @@ def build():
     sheet.place(terminal, 'J4', '20V in', 50.8, 304.8, {'1': 'VM_IN', '2': 'GND'}, footprint=TERMINAL)
     sheet.place(terminal, 'J5', '20V door', 50.8, 330.2, {'1': 'VM_IN', '2': 'GND'}, footprint=TERMINAL)
     two(device('Fuse'), 'F1', '3A', 101.6, 317.5, 'VM_IN', 'VM', 'Fuse:Fuse_1206_3216Metric')
-    two(cap_pol, 'C15', '470uF 35V', 139.7, 317.5, 'VM', 'GND', 'Capacitor_SMD:CP_Elec_10x10.5')
+    # Buffer for the coil pulses of this board: one pulse takes some 0.45 A x 224 us = 100 uC, 0.45 V on
+    # 220 uF. Kept small, as eight boards share the 20 V and a PD charger expects little capacitance
+    two(cap_pol, 'C15', '220uF 50V', 139.7, 317.5, 'VM', 'GND', 'Capacitor_SMD:CP_Elec_10x10.5')
     two(cap, 'C16', '10uF 50V', 165.1, 317.5, 'VM', 'GND', C1206)
     # 5 V buck, the fixed 5 V AP63205 with the parts of table 3 in its datasheet (Diodes DS41326): 4.7 uH,
     # 10 uF in (C16), 2 x 22 uF out, 100 nF from SW to BST. FB senses the output itself, EN on VIN starts it
@@ -524,6 +535,20 @@ def build():
     two(device('L'), 'L1', '4.7uH', 241.3, 330.2, 'SW', '+5V', 'Inductor_SMD:L_Sunlord_SWPA4030S')
     two(cap, 'C17', '22uF 25V', 266.7, 317.5, '+5V', 'GND', C1206)
     two(cap, 'C21', '22uF 25V', 279.4, 317.5, '+5V', 'GND', C1206)
+
+    # Coil current: every pulse returns through one ULN2803A, all six have their ground on GND_ULN and
+    # that goes to ground through R8. The INA180A2 (gain 50, 210 kHz) makes 2.25 V of 0.45 A; R6/R7 bring
+    # that to 1.5 V for the ADC of the ESP32 (full scale about 0.93 A). On boards without an ESP32 only TP1.
+    # Route IN+ and IN- as a separate pair from the two pads of R8 (Kelvin connection)
+    two(res, 'R8', '0.1R 1%', 101.6, 368.3, 'GND_ULN', 'GND', 'Resistor_SMD:R_1206_3216Metric')
+    sheet.place(schematic.load_symbol('Amplifier_Current', 'INA180A2'), 'U30', 'INA180A2', 139.7, 368.3,
+                {'1': 'ISENSE', '2': 'GND', '3': 'GND_ULN', '4': 'GND', '5': '+5V'}, footprint=SOT235)
+    LCSC['U30'] = PARTS['INA180A2']
+    two(cap, 'C22', '100nF', 165.1, 368.3, '+5V', 'GND', C0603)
+    two(res, 'R6', '10k', 190.5, 368.3, 'ISENSE', 'ISENSE_ADC', R0603)
+    two(res, 'R7', '20k', 215.9, 368.3, 'ISENSE_ADC', 'GND', R0603)
+    sheet.place(schematic.load_symbol('Connector', 'TestPoint'), 'TP1', 'Stroom', 241.3, 368.3, {'1': 'ISENSE'},
+                footprint='TestPoint:TestPoint_Pad_D1.5mm')
 
     # Link to the next board: straight 10 way cable from J2 to J3 of the next board. Pin 1 carries the chain
     # data, pin 6 the chain back towards the ESP32. On the last board JP1 closes the chain
@@ -566,7 +591,7 @@ def write_schematic(sheet, esp_raw):
     schematic.PROJECT, schematic.OUT = NAME, HERE
     version = re.search(r'\(version (\d+)\)', schematic.library_text('power')).group(1)
     root = schematic.uid('sheet', NAME)
-    schematic.write_sheet(sheet, {'VM', 'VM_IN', 'ESP_5V'}, f'/{root}', version, ['GND', 'VM_IN', 'VM', 'ESP_5V', '+5V'], {'power': 0, 'flag': 0})
+    schematic.write_sheet(sheet, {'VM', 'VM_IN', 'ESP_5V', 'GND_ULN'}, f'/{root}', version, ['GND', 'VM_IN', 'VM', 'ESP_5V', '+5V', 'GND_ULN'], {'power': 0, 'flag': 0})
     path = os.path.join(HERE, NAME + '.kicad_sch')
     text = open(path).read().replace('(paper "A3")', '(paper "A2")')
 
@@ -593,7 +618,7 @@ def write_schematic(sheet, esp_raw):
                 outputs += [(f'PLUS{channel}', f'{header}_{2 * index + 1}'), (f'MIN{channel}', f'{header}_{2 * index + 2}')]
         blocks.append({'name': name, 'file': files[kind], 'x': 292.1, 'y': y, 'w': 63.5, 'in': inputs, 'out': outputs})
         y += 2.54 * (len(outputs) + 1) + 12.7
-    words = [('ESP32-S3-DevKitC-1', 40.64, 58.42), ('Voeding: 20 V van de PD-module', 40.64, 289.56), ('Doorlus naar het volgende bord', 330.2, 320.04),
+    words = [('ESP32-S3-DevKitC-1', 40.64, 58.42), ('Voeding: 20 V van de PD-module', 40.64, 289.56), ('Stroommeting spoelen', 40.64, 355.6), ('Doorlus naar het volgende bord', 330.2, 320.04),
              ('Besturing', 165.1, 35.56), ('Zes groepen van 8 lijnen', 292.1, 35.56), ('Connectors naar het paneel', 457.2, 30.48)]
     notes = ''.join(f'(text "{w}" (at {x} {y} 0) (effects (font (size 2.54 2.54)) (justify left bottom)) (uuid "{schematic.uid("root", w)}"))\n'
                     for w, x, y in words)
@@ -668,6 +693,9 @@ CENTRES = {
     'J4': (15, 71, 0), 'J5': (27, 71, 0), 'F1': (36.5, 68, 90), 'C15': (48, 70, 0), 'C16': (59, 66, 90),
     'U27': (64, 71, 0), 'C20': (66.8, 67.6, 90), 'L1': (70.5, 71, 0), 'C21': (75, 71, 90), 'C17': (77, 66, 90),
     'D1': (186, 74.5, 90),
+    # Current measurement, between the blocks of G1 and G6
+    'R8': (95.5, 41.5, 90), 'U30': (100, 41.5, 0), 'C22': (100, 44.2, 0), 'R6': (104.5, 40.3, 0), 'R7': (104.5, 42.7, 0),
+    'TP1': (109, 41.5, 0),
     'J2': (128, 72.5, 270), 'J3': (155, 72.5, 270), 'R4': (175, 72.5, 0), 'R5': (175, 75.5, 0),
     # The link buffer between the power corner and J2
     'U28': (100, 71, 90), 'C18': (90, 75.5, 90), 'RN15': (89.5, 70, 0), 'RN13': (110, 68.5, 0), 'RN14': (110, 73, 0),
@@ -701,7 +729,7 @@ def centre(footprint, x, y, rotation):
 
 def quiet(footprint, ref):
     """Small parts packed too close for text on the silkscreen: their reference only on the fab layer."""
-    if re.match(r'C([1-9]|1[0-2]|18|19|20|21)$|RN1[345]$', ref):
+    if re.match(r'C([1-9]|1[0-2]|18|19|20|21|22)$|RN\d+$|R[678]$', ref):
         footprint.Reference().SetLayer(pcbnew.F_Fab)
 
 

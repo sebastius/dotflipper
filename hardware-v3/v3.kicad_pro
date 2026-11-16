@@ -642,6 +642,10 @@
       {
         "netclass": "5V",
         "pattern": "ESP_5V"
+      },
+      {
+        "netclass": "Voeding",
+        "pattern": "GND_ULN"
       }
     ]
   },
