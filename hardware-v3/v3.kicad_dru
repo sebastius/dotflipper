@@ -1,0 +1,19 @@
+(version 1)
+# JLCPCB, standard 2 layer, 1 oz (jlcpcb.com/capabilities/pcb-capabilities, read 2026-11-16).
+# The general minimums are in Board Setup; these are the ones that differ per kind of hole.
+
+(rule "JLC: gat van through-hole pad tot koper 0,28 mm (0,35 aanbevolen)"
+  (condition "A.Type == 'Pad' && A.Pad_Type == 'Through-hole'")
+  (constraint hole_clearance (min 0.28mm)))
+
+(rule "JLC: gat tot gat bij through-hole pads 0,45 mm"
+  (condition "A.Type == 'Pad' && B.Type == 'Pad' && A.Pad_Type == 'Through-hole' && B.Pad_Type == 'Through-hole'")
+  (constraint hole_to_hole (min 0.45mm)))
+
+(rule "JLC: ring van through-hole pads 0,18 mm (0,25 aanbevolen)"
+  (condition "A.Type == 'Pad' && A.Pad_Type == 'Through-hole'")
+  (constraint annular_width (min 0.18mm)))
+
+(rule "JLC: ring van via's 0,075 mm"
+  (condition "A.Type == 'Via'")
+  (constraint annular_width (min 0.075mm)))

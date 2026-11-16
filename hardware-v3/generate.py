@@ -223,6 +223,11 @@ class Drawn:
         open(os.path.join(HERE, self.file + '.kicad_sch'), 'w').write('\n'.join(out))
 
 
+# Bit (0 = QA) on pads 1-4 of the first pull-down array, then of the second. QA comes around the end of
+# the 595 to pad 4, so QB-QD run straight to pads 1-3.
+PULL_PADS = (1, 2, 3, 0, 4, 5, 6, 7)
+
+
 def group_refs(g):
     u = 4 * g
     return {'SRH': f'U{u + 1}', 'SRL': f'U{u + 2}', 'UDN': f'U{u + 3}', 'ULN': f'U{u + 4}', 'CH': f'C{2 * g + 1}', 'CL': f'C{2 * g + 2}',
@@ -265,7 +270,8 @@ def group_sheet(kind, instances, root, version):
             channel = 8 - i
             inp = driver(f'I{channel}')
             assert q[1] == inp[1], (letter, q, inp)
-            tap = x_sr + 22.86 + i * 2.54 + (0 if i < 4 else 10.16)
+            pad = PULL_PADS.index(i)  # Which pad of the two pull-down arrays takes this bit
+            tap = x_sr + 22.86 + pad * 2.54 + (0 if pad < 4 else 10.16)
             if packs:
                 d.wire(q, (tap, q[1]), inp)
                 d.junction(tap, q[1])
@@ -279,7 +285,7 @@ def group_sheet(kind, instances, root, version):
             tip = d.symbol(pack, role_pack, '4x10k', x_pack, y_pack, ARRAY, mirror=True)
             for n in range(4):
                 top = tip(str(n + 1))
-                d.wire(taps[4 * p + n], top)
+                d.wire(taps[PULL_PADS[4 * p + n]], top)
             bottoms = [tip(str(8 - n)) for n in range(4)]
             d.wire(*bottoms)
             d.power('GND', *bottoms[1])
