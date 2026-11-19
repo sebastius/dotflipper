@@ -176,10 +176,11 @@ static void drawwords(const struct tm &now) {
     words[count++] = "UUR";
   }
 
-  // Lines are 8 rows apart, so no line crosses the seam between the panels
-  uint8_t line = count == 2 ? 1 : 0;
+  // Lines are 8 rows apart, centered on the face. With 2 or 4 lines that keeps every line clear of
+  // the seams between the panels; 3 lines sit 4 rows lower, so the middle one crosses a seam.
+  uint8_t top = (FACE - (count * 8 - 1)) / 2;
   for (uint8_t i = 0; i < count; i++) {
-    drawword(words[i], (line + i) * 8);
+    drawword(words[i], top + i * 8);
   }
 }
 
