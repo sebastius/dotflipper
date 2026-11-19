@@ -6,7 +6,11 @@
 #include "animation.h"
 #include "flipsettings.h"
 #include "player.h"
+#ifdef HARDWARE_V3
+#include "shiftchain.h"
+#else
 #include "pca9685.h"
+#endif
 #include "webui.h"
 
 static WebServer server(80);
@@ -309,8 +313,18 @@ static void sendstate() {
 
   doc["uptime"] = millis() / 1000;
 
-  JsonObject i2c = doc["i2c"].to<JsonObject>();
   uint32_t mhz = getCpuFrequencyMhz();
+#ifdef HARDWARE_V3
+  JsonObject chain = doc["chain"].to<JsonObject>();
+  chain["boards"] = CHAIN_BOARDS;
+  chain["boards_found"] = chainboardsfound;
+  chain["fault"] = chainfault;
+  chain["pulses"] = chainstats.pulses;
+  chain["pulse_min_us"] = chainstats.pulses ? chainstats.pulsemin / mhz : 0;
+  chain["pulse_max_us"] = chainstats.pulsemax / mhz;
+  chain["pulse_avg_us"] = chainstats.pulses ? (uint32_t)(chainstats.pulsetotal / chainstats.pulses / mhz) : 0;
+#else
+  JsonObject i2c = doc["i2c"].to<JsonObject>();
   i2c["writes"] = i2cstats.writes;
   i2c["nack"] = i2cstats.nack;
   i2c["timeout"] = i2cstats.timeout;
@@ -319,6 +333,7 @@ static void sendstate() {
   i2c["pulses"] = i2cstats.pulses;
   i2c["pulse_max_us"] = i2cstats.pulsemax / mhz;
   i2c["pulse_avg_us"] = i2cstats.pulses ? (uint32_t)(i2cstats.pulsetotal / i2cstats.pulses / mhz) : 0;
+#endif
 
   settingstojson(doc["settings"].to<JsonObject>());
 

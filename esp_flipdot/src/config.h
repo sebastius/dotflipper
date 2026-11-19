@@ -16,10 +16,29 @@
 #error "Please check PANELS_X and PANELS_Y: both should be > 0 and PANELS_X*PANELS_Y should not be > 8!"
 #endif
 
-// I2C bus to the PCA9685 drivers
+// Hardware. Default: the v1 boards with PCA9685 drivers over I2C, on an ESP32 PICO.
+// HARDWARE_V3 (pio env v3): the v3 boards with 74HC595 shift registers, on an ESP32-S3-DevKitC-1.
+
+// I2C bus to the PCA9685 drivers (v1)
 #define I2C_SDA 25
 #define I2C_SCL 26
 #define I2C_CLOCK 800000
+
+// Chain of v3 boards: one board per panel, panel 0 on the board with the ESP32, the next panel on the
+// board its J2 goes to, and so on. Close JP1 on the last board: at startup the firmware sends one bit
+// around the chain and counts the boards. When that count isn't CHAIN_BOARDS nothing flips.
+#define CHAIN_BOARDS       (PANELS_X * PANELS_Y)
+#define CHAIN_PIN_DATA     11
+#define CHAIN_PIN_SCLK     12
+#define CHAIN_PIN_LATCH    10
+#define CHAIN_PIN_NOE      9
+#define CHAIN_PIN_DIR_X1   14
+#define CHAIN_PIN_DIR_ROW  8
+#define CHAIN_PIN_RETURN   13
+#define CHAIN_PIN_CURRENT  4      // Coil current from the INA180, 0.45 A is about 1.5 V (not used yet)
+#define CHAIN_CLOCK        2000000  // SCLK in Hz, each cable has 1k in series: a few MHz at most
+#define CHAIN_CHECK_CLOCK  50000    // SCLK while counting boards: the return line passes every board
+#define PULSE_GAP_MICROS   100      // Rest between two pulses, for the coil current to die out. Not measured yet
 
 // Length of the coil pulse. It sets the peak current: 20 V over 20 ohm would end up above what
 // the drivers can take, only a short pulse keeps the current down.

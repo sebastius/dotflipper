@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <initializer_list>
 
 typedef uint8_t byte;
 typedef bool boolean;
@@ -12,6 +13,7 @@ typedef bool boolean;
 #define HEX 16
 #define DEC 10
 #define INPUT 1
+#define OUTPUT 3
 #define IRAM_ATTR
 
 typedef int portMUX_TYPE;

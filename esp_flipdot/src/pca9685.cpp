@@ -1,3 +1,5 @@
+#ifndef HARDWARE_V3  // Only the v1 boards have PCA9685 drivers
+
 #include "config.h"
 #include "pca9685.h"
 #include "i2cpins.h"
@@ -237,3 +239,5 @@ void i2cscanner() {
     Serial.println(" found");
   }
 }
+
+#endif

@@ -5,7 +5,6 @@
 #include "flipsettings.h"
 #include "clockface.h"
 #include "transition.h"
-#include "pca9685.h"
 #include "player.h"
 
 enum PlayerState { SHOWING_OFF, SHOWING_CLOCK, SHOWING_ANIMATION };
@@ -161,7 +160,7 @@ void playersetup() {
 }
 
 void playerloop() {
-  if (i2cfault) {
+  if (driverfault()) {
     return;  // Nothing flips anymore until a restart
   }
 
@@ -210,7 +209,7 @@ void playerpreview(uint8_t index) {
 }
 
 String playerstatus() {
-  if (i2cfault) {
+  if (driverfault()) {
     return "fault";
   }
   switch (state) {

@@ -1,9 +1,23 @@
 #include "display.h"
-#include "pca9685.h"
-#include "i2cpins.h"
 
 boolean current_state[COLS][ROWS];
 boolean next_state[COLS][ROWS];
+
+#ifndef HARDWARE_V3
+// v1: PCA9685 drivers over I2C. The v3 boards have their own flipdot() and fullupdate() in display595.cpp.
+
+#include "pca9685.h"
+#include "i2cpins.h"
+
+void driverbegin() {
+  i2cbegin();
+  // After a reset in the middle of a pulse the drivers are still on
+  resetPCA9685();
+}
+
+bool driverfault() {
+  return i2cfault;
+}
 
 static portMUX_TYPE flipmux = portMUX_INITIALIZER_UNLOCKED;
 
@@ -173,6 +187,8 @@ void fullupdate() {
     current_state[x][y + 16] = !next_state[x][y + 16];
   }
 }
+
+#endif  // HARDWARE_V3
 
 // Sets a dot in next_state, dots outside the screen are ignored.
 void setdot(int16_t x, int16_t y, bool on) {

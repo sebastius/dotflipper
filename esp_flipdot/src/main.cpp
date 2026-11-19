@@ -22,9 +22,12 @@
 //
 //  Files (in src/):
 //    config.h       panel layout, features and settings
-//    pca9685.*      bit-banged I2C to the PCA9685 driver chips
-//    i2cpins.h      direct access to the I2C pins
-//    display.*      framebuffers and flipping dots
+//    pca9685.*      bit-banged I2C to the PCA9685 driver chips (v1 boards)
+//    i2cpins.h      direct access to the I2C pins (v1)
+//    shiftchain.*   the chain of 74HC595 shift registers (v3 boards, HARDWARE_V3)
+//    chainpins.h    direct access to the chain pins (v3)
+//    display.*      framebuffers and flipping dots (v1)
+//    display595.cpp flipping dots on the v3 boards
 //    pictures.h     bitmaps
 //    flipsettings.* settings from the web interface, stored in flash
 //    player.*       decides what is on the screen: clock, animations or nothing
@@ -67,8 +70,10 @@
 #include <ArduinoOTA.h>
 
 #include "config.h"
-#include "pca9685.h"
 #include "display.h"
+#ifndef HARDWARE_V3
+#include "pca9685.h"
+#endif
 #include "wifisetup.h"
 
 #ifdef NETWORK
@@ -83,10 +88,8 @@
 #define WIFI_RESET_PIN 0  // BOOT button on most ESP32 boards
 
 void setup() {
-  i2cbegin();
-
-  // First thing: after a reset in the middle of a pulse the drivers are still on
-  resetPCA9685();
+  // First thing: after a reset in the middle of a pulse the drivers can still be on
+  driverbegin();
 
   Serial.begin(115200);
   Serial.println();
@@ -94,7 +97,9 @@ void setup() {
   Serial.println("Flipdot software");
 
 #ifdef DEBUG
+#ifndef HARDWARE_V3
   i2cscanner();
+#endif
   for (uint8_t t = 10; t > 0; t--) {
     Serial.print("Waiting ");
     Serial.print(t);
