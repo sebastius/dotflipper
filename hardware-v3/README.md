@@ -2,7 +2,7 @@
 
 > **AI-generated and untested.** The schematic, board placement, scripts and part choices in this
 > folder were made with an AI assistant (Claude) and have not been built or tested on real hardware
-> yet. The board is not fully routed. Check everything yourself before ordering, and test the first
+> yet. The board is routed and passes DRC (2026-11-19). Check everything yourself before ordering, and test the first
 > board with a current-limited supply: these drivers switch 20 V coils, and a mistake can short them.
 
 One flip dot panel (32x32, two 32x16 halves) per board.

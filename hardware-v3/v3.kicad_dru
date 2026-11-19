@@ -17,3 +17,8 @@
 (rule "JLC: ring van via's 0,075 mm"
   (condition "A.Type == 'Via'")
   (constraint annular_width (min 0.075mm)))
+
+# Pads met 1 spoke zijn signaal- of ontkoppelpads, of hangen ook via de andere laag of een via aan GND.
+(rule "1 spoke naar het vlak is genoeg"
+  (condition "A.Type == 'Pad'")
+  (constraint min_resolved_spokes 1))
