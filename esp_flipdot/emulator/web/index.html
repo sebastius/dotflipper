@@ -78,7 +78,8 @@ function fail(error) {
     document.getElementById('ui').before(box);
   }
   box.className = 'bad';
-  box.textContent = 'De emulator is gestopt: ' + (error && (error.stack || error.message) || error) +
+  const text = error && error.message ? error.message + '\n' + (error.stack || '') : String(error);
+  box.textContent = 'De emulator is gestopt: ' + text +
     '\n\nProbeer de pagina te verversen met Ctrl+Shift+R.';
   console.error(error);
 }

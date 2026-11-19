@@ -21,6 +21,7 @@ else
   mkdir -p web
   emcc $flags $sources -o web/firmware.js \
     -sMODULARIZE -sEXPORT_NAME=Firmware -sALLOW_MEMORY_GROWTH -sENVIRONMENT=web \
+    -sEXPORTED_FUNCTIONS=_malloc,_free \
     -sEXPORTED_RUNTIME_METHODS=ccall,cwrap,UTF8ToString,HEAPF64,HEAP32
   echo "Klaar: web/firmware.js en web/firmware.wasm"
 fi
