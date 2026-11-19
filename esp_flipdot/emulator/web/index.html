@@ -31,10 +31,12 @@ canvas { display: block; width: 100%; height: auto; image-rendering: auto; }
 .stat b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
 .stat span { color: var(--muted); font-size: 13px; }
 .ok { color: var(--good); } .bad { color: var(--bad); }
+iframe[hidden] { display: none; }
 iframe { width: 100%; height: 900px; border: 0; border-radius: 12px; background: var(--card); display: block; }
 footer { color: var(--muted); font-size: 13px; margin-top: 16px; }
 a { color: inherit; }
 #loading { color: var(--muted); padding: 24px 0; }
+#loading.bad { color: var(--bad); white-space: pre-wrap; }
 </style>
 </head>
 <body>
@@ -62,10 +64,31 @@ a { color: inherit; }
   <footer>Bron: <a href="https://github.com/sebastius/dotflipper">github.com/sebastius/dotflipper</a>, map
     <code>esp_flipdot/emulator</code>. Instellingen blijven bewaard in je browser. De klok volgt de tijdzone van je browser.</footer>
 </main>
-<script src="firmware.js"></script>
+<script src="firmware.js?v=__VERSION__"></script>
 <script>
+// Shows why the emulator stopped, instead of loading forever
+let stopped = false;
+function fail(error) {
+  if (stopped) return;
+  stopped = true;
+  let box = document.getElementById('loading');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'loading';
+    document.getElementById('ui').before(box);
+  }
+  box.className = 'bad';
+  box.textContent = 'De emulator is gestopt: ' + (error && (error.stack || error.message) || error) +
+    '\n\nProbeer de pagina te verversen met Ctrl+Shift+R.';
+  console.error(error);
+}
+window.addEventListener('error', e => fail(e.error || e.message));
+window.addEventListener('unhandledrejection', e => fail(e.reason));
+
 (async () => {
-  const fw = await Firmware();
+  if (typeof Firmware !== 'function') throw new Error('firmware.js is niet geladen');
+  // The version keeps the browser from mixing a cached firmware.js with a newer firmware.wasm
+  const fw = await Firmware({ locateFile: path => path + '?v=__VERSION__', onAbort: fail });
   const call = (name, ret, types, args) => fw.ccall(name, ret, types, args);
 
   const cols = call('emucols', 'number'), rows = call('emurows', 'number');
@@ -128,6 +151,11 @@ a { color: inherit; }
   const $ = id => document.getElementById(id);
   let lastStats = 0;
   function frame() {
+    if (stopped) return;
+    try { step(); } catch (error) { fail(error); return; }
+    requestAnimationFrame(frame);
+  }
+  function step() {
     const now = performance.now();
     const realUs = (now - start) * 1000;
     call('emurun', null, ['number'], [realUs]);
@@ -165,10 +193,9 @@ a { color: inherit; }
       const ahead = Math.max(0, call('emunow', 'number') - realUs) / 1000;
       $('s-ahead').textContent = ahead.toFixed(0) + ' ms';
     }
-    requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-})();
+})().catch(fail);
 </script>
 </body>
 </html>
