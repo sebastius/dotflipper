@@ -5,7 +5,8 @@
 > Test the first board with a current-limited supply: these drivers switch 20 V coils, and a mistake
 > can short them.
 
-One flip dot panel (32x32, two 32x16 halves) per board, 205 x 80 mm, two layers, all logic and drivers SMD.
+One flip dot panel of 32x16 (32 lines on X1, 16 rows on X2/X3) per board, so two boards for a 32x32
+display. 205 x 80 mm, two layers, all logic and drivers SMD.
 
 ![3D render of the v3 board](pcb3d.jpeg)
 
