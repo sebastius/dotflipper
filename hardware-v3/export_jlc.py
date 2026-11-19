@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Makes everything JLCPCB needs for the v3 board: python3 export_jlc.py [--kostencheck]
+"""Makes everything JLCPCB needs for the v3 board: python3 export_jlc.py
 
 Writes to jlcpcb/: a zip with Gerbers and drill files, the BOM and the placement file. Parts that are
 excluded from the BOM and position file in KiCad, the through hole parts, stay out of both.
 
-With --kostencheck it skips the DRC check and writes to jlcpcb-kostencheck/ instead: only for a quote,
-not for an order, the board may not be routed yet.
+It refuses to write anything while DRC finds errors, open connections or differences with the schematic.
 """
 
 import csv
@@ -16,13 +15,11 @@ import re
 import shutil
 import subprocess
 import tempfile
-import sys
 import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BOARD = os.path.join(HERE, 'v3.kicad_pcb')
-QUOTE = '--kostencheck' in sys.argv
-OUT = os.path.join(HERE, 'jlcpcb-kostencheck' if QUOTE else 'jlcpcb')
+OUT = os.path.join(HERE, 'jlcpcb')
 LAYERS = 'F.Cu,B.Cu,F.Paste,B.Paste,F.SilkS,B.SilkS,F.Mask,B.Mask,Edge.Cuts'
 
 
@@ -111,8 +108,7 @@ def checked():
 
 
 if __name__ == '__main__':
-    if not QUOTE:
-        checked()
+    checked()
     os.makedirs(OUT, exist_ok=True)
     gerbers()
     found = parts()
