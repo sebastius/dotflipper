@@ -12,8 +12,11 @@ g++ -std=c++17 -O1 -DSIMULATE -DHAS_STATS -DHAS_FAULT -DHAS_BITBANG -I. -I../src
 "$out/new" "$out/new.trace"
 
 echo
-g++ -std=c++17 -O1 -DSIMULATE -DHARDWARE_V3 -I. -I../src simulate595.cpp ../src/display.cpp ../src/display595.cpp ../src/shiftchain.cpp -o "$out/v3"
-"$out/v3"
+for layout in "-DPANELS_X=1 -DPANELS_Y=2" "-DPANELS_X=2 -DPANELS_Y=4"; do
+  g++ -std=c++17 -O1 -DSIMULATE -DHARDWARE_V3 $layout -I. -I../src simulate595.cpp ../src/display.cpp ../src/display595.cpp ../src/shiftchain.cpp -o "$out/v3"
+  "$out/v3"
+  echo
+done
 
 if [ -n "$1" ]; then
   mkdir "$out/old"

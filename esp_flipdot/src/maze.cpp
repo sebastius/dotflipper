@@ -14,14 +14,16 @@
 #define MAZE_TAIL  3      // Length of the snake behind its head
 #define MAZE_PAUSE 50     // Frames to wait when the snake has arrived
 
-static_assert(MAZE_CELLS < 255, "Maze cells are stored in a byte");
+typedef uint16_t MazeCell;  // 64x64 dots make 961 cells
+#define MAZE_NONE 0xFFFF
+static_assert(MAZE_CELLS < MAZE_NONE, "Maze cells are stored in a MazeCell");
 
 enum MazeState { DIGGING, WALKING, PAUSING };
 
 static MazeState state;
 static bool visited[MAZE_W][MAZE_H];
-static uint8_t stack[MAZE_CELLS];
-static uint8_t stacksize;
+static MazeCell stack[MAZE_CELLS];
+static MazeCell stacksize;
 static uint16_t path[2 * MAZE_CELLS];  // Dots of the solution as x * ROWS + y
 static uint16_t pathlength;
 static uint16_t position;
@@ -30,30 +32,31 @@ static const int8_t directions[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 
 
 static void solve() {
   // Breadth first search from the first to the last cell through the open walls
-  uint8_t parent[MAZE_CELLS];
-  uint8_t queue[MAZE_CELLS];
-  uint8_t head = 0, tail = 0;
-  memset(parent, 255, sizeof(parent));
+  // Static: at 64x64 these arrays would take almost 6 kB of the 8 kB stack of loop()
+  static MazeCell parent[MAZE_CELLS];
+  static MazeCell queue[MAZE_CELLS];
+  MazeCell head = 0, tail = 0;
+  memset(parent, 0xFF, sizeof(parent));
   parent[0] = 0;
   queue[tail++] = 0;
   while (head < tail) {
-    uint8_t cell = queue[head++];
+    MazeCell cell = queue[head++];
     int8_t cx = cell % MAZE_W, cy = cell / MAZE_W;
     for (uint8_t d = 0; d < 4; d++) {
       int8_t nx = cx + directions[d][0], ny = cy + directions[d][1];
       if (nx < 0 || nx >= MAZE_W || ny < 0 || ny >= MAZE_H) continue;
       if (next_state[2 * cx + 1 + directions[d][0]][2 * cy + 1 + directions[d][1]]) continue;  // wall
-      uint8_t n = ny * MAZE_W + nx;
-      if (parent[n] != 255) continue;
+      MazeCell n = ny * MAZE_W + nx;
+      if (parent[n] != MAZE_NONE) continue;
       parent[n] = cell;
       queue[tail++] = n;
     }
   }
 
   // Walk back from the last cell, then reverse into dots including the ones in between
-  uint8_t cells[MAZE_CELLS];
-  uint8_t count = 0;
-  for (uint8_t c = MAZE_CELLS - 1; ; c = parent[c]) {
+  static MazeCell cells[MAZE_CELLS];
+  MazeCell count = 0;
+  for (MazeCell c = MAZE_CELLS - 1; ; c = parent[c]) {
     cells[count++] = c;
     if (c == 0) break;
   }
@@ -84,7 +87,7 @@ static void mazesetup() {
 
 static void dig() {
   while (stacksize > 0) {
-    uint8_t cell = stack[stacksize - 1];
+    MazeCell cell = stack[stacksize - 1];
     int8_t cx = cell % MAZE_W, cy = cell / MAZE_W;
 
     uint8_t options[4], count = 0;

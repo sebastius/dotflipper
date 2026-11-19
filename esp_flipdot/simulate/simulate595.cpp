@@ -31,8 +31,8 @@ FakeESP ESP;
 #define HW_MAX 9
 #define MHZ 240
 
-static uint32_t cycles;
-uint32_t FakeESP::getCycleCount() { return cycles; }
+static uint64_t cycles;  // 64 bits: 32 would wrap after 18 s of virtual time
+uint32_t FakeESP::getCycleCount() { return (uint32_t)cycles; }
 void delayMicroseconds(unsigned int us) { cycles += us * MHZ; }
 
 // The hardware
@@ -47,7 +47,7 @@ static long violations, coilcount;
 static bool rule1, rule2, rule5;
 static int maxcoils;
 static bool coilon[HW_MAX];
-static uint32_t coilstart[HW_MAX], lastcoilend;
+static uint64_t coilstart[HW_MAX], lastcoilend;
 static bool anycoilended;
 static uint32_t pulseshortest = 0xFFFFFFFF, pulselongest;
 static uint32_t gapshortest = 0xFFFFFFFF;
@@ -232,7 +232,7 @@ int main() {
   YellowScreen();
   ClearScreen();
   long frames = 0, pulsesbefore = chainstats.pulses;
-  uint32_t before = cycles;
+  uint64_t before = cycles;
   bool allmatch = true, offbetween = true;
   for (int percent : { 1, 5, 25, 50, 100 }) {
     for (int i = 0; i < 40; i++, frames++) {

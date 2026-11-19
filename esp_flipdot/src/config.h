@@ -5,8 +5,13 @@
 //#define NETWORK    // Only show UDP framebuffers, instead of the clock and animations
 
 // Panel layout
+// The v1 code only handles two panels on top of each other; the v3 env sets its own layout in platformio.ini
+#ifndef PANELS_X
 #define PANELS_X     1   // in number of panels
+#endif
+#ifndef PANELS_Y
 #define PANELS_Y     2   // in number of panels
+#endif
 #define PANEL_WIDTH  32  // in dots
 #define PANEL_HEIGHT 16  // in dots
 #define COLS (PANELS_X * PANEL_WIDTH)

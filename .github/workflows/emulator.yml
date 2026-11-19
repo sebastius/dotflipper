@@ -1,0 +1,55 @@
+# Runs the simulations, builds the emulator (the v3 firmware for 64x64 in WebAssembly)
+# and publishes it on GitHub Pages.
+name: Emulator
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'esp_flipdot/**'
+      - '.github/workflows/emulator.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Simulaties v1 en v3
+        run: esp_flipdot/simulate/run.sh
+
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.74
+
+      - name: ArduinoJson
+        run: git clone --quiet --depth 1 --branch v7.4.3 https://github.com/bblanchon/ArduinoJson.git "$RUNNER_TEMP/ArduinoJson"
+
+      - name: Emulator bouwen
+        run: ARDUINOJSON="$RUNNER_TEMP/ArduinoJson/src" esp_flipdot/emulator/build.sh
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: esp_flipdot/emulator/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

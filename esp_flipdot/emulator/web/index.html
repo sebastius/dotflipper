@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flipdot-emulator</title>
+<style>
+:root {
+  --bg: #f4f3ef; --card: #ffffff; --text: #1d1d1b; --muted: #6b6a65; --line: #e2e0d9;
+  --housing: #1b1b1a; --dot-off: #2a2a28; --dot-on: #f2c12e; --bad: #c0392b; --good: #2e7d32;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141413; --card: #1f1f1d; --text: #ecebe6; --muted: #9a9890; --line: #33322f;
+    --housing: #0b0b0a; --dot-off: #262624; --bad: #ef6b5b; --good: #6fbf73;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1240px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.lead { color: var(--muted); margin: 0 0 16px; max-width: 70ch; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 560px); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.screen { background: var(--housing); border-radius: 8px; padding: 10px; }
+canvas { display: block; width: 100%; height: auto; image-rendering: auto; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 12px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.stat b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: 13px; }
+.ok { color: var(--good); } .bad { color: var(--bad); }
+iframe { width: 100%; height: 900px; border: 0; border-radius: 12px; background: var(--card); display: block; }
+footer { color: var(--muted); font-size: 13px; margin-top: 16px; }
+a { color: inherit; }
+#loading { color: var(--muted); padding: 24px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Flipdot-emulator</h1>
+  <p class="lead">De firmware voor de v3-borden, gecompileerd naar WebAssembly, op een model van acht borden
+    met panelen van 32×16: samen 64×64 dots. Elke dot flipt pas als de 595-keten, de latch, DIR en nOE hem
+    echt een puls geven. Rechts staat de webinterface van de firmware zelf.</p>
+  <div class="layout">
+    <section class="card">
+      <div class="screen"><canvas id="dots" width="640" height="640" aria-label="Flipdot-scherm van 64 bij 64 dots"></canvas></div>
+      <div class="stats">
+        <div class="stat"><b id="s-pulses">0</b><span>pulsen</span></div>
+        <div class="stat"><b id="s-pulse">-</b><span>pulsduur (doel 224 µs)</span></div>
+        <div class="stat"><b id="s-boards">-</b><span>borden geteld</span></div>
+        <div class="stat"><b id="s-rules">-</b><span>overtredingen in het model</span></div>
+        <div class="stat"><b id="s-ahead">-</b><span>firmware loopt voor</span></div>
+      </div>
+    </section>
+    <section>
+      <div id="loading">Firmware laden…</div>
+      <iframe id="ui" title="Webinterface van de firmware" hidden></iframe>
+    </section>
+  </div>
+  <footer>Bron: <a href="https://github.com/sebastius/dotflipper">github.com/sebastius/dotflipper</a>, map
+    <code>esp_flipdot/emulator</code>. Instellingen blijven bewaard in je browser. De klok volgt de tijdzone van je browser.</footer>
+</main>
+<script src="firmware.js"></script>
+<script>
+(async () => {
+  const fw = await Firmware();
+  const call = (name, ret, types, args) => fw.ccall(name, ret, types, args);
+
+  const cols = call('emucols', 'number'), rows = call('emurows', 'number');
+  const canvas = document.getElementById('dots');
+  const ctx = canvas.getContext('2d');
+  const panelGap = 6, cell = 9.5;
+  canvas.width = Math.round(cols * cell + (cols / 32 - 1) * panelGap);
+  canvas.height = Math.round(rows * cell + (rows / 16 - 1) * panelGap);
+
+  const shown = new Uint8Array(cols * rows);    // Color on screen
+  const flipStart = new Float64Array(cols * rows).fill(-1e12);  // Real time of the last flip, in ms
+  const FLIP_MS = 60;
+  const pending = [];  // Flips from the firmware that are still in the future: [us, x, y, color]
+
+  const css = getComputedStyle(document.documentElement);
+  const colors = () => ({ on: css.getPropertyValue('--dot-on').trim(), off: css.getPropertyValue('--dot-off').trim() });
+
+  function draw(now) {
+    const c = colors();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const i = y * cols + x;
+        const cx = x * cell + Math.floor(x / 32) * panelGap + cell / 2;
+        const cy = y * cell + Math.floor(y / 16) * panelGap + cell / 2;
+        const t = (now - flipStart[i]) / FLIP_MS;
+        let color = shown[i], squash = 1;
+        if (t < 1) {  // The disc turns over: narrow, then the other side
+          squash = Math.abs(Math.cos(Math.PI * t));
+          if (t < 0.5) color = 1 - color;
+        }
+        ctx.fillStyle = color ? c.on : c.off;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, Math.max(0.6, cell * 0.42 * squash), cell * 0.42, 0, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    }
+  }
+
+  // The web interface of the firmware, with its requests sent to the firmware instead of the network
+  window.emuFetch = async (url, options = {}) => {
+    const u = new URL(url, 'http://flipdot.local/');
+    const body = options.body ? String(options.body) : '';
+    const text = call('emurequest', 'string', ['string', 'string', 'string', 'string'],
+                      [options.method || 'GET', u.pathname, u.search.slice(1), body]);
+    return new Response(text, { status: call('emureplycode', 'number'),
+                                headers: { 'Content-Type': call('emureplytype', 'string') } });
+  };
+
+  const start = performance.now();
+  call('emustart');  // Its startup flips every dot to yellow and back, that shows in the first second
+
+  const page = call('emurequest', 'string', ['string', 'string', 'string', 'string'], ['GET', '/', '', '']);
+  const bridge = '<script>window.fetch = (url, options) => parent.emuFetch(url, options);<\/script>';
+  const ui = document.getElementById('ui');
+  ui.srcdoc = page.replace('<head>', '<head>' + bridge);
+  ui.hidden = false;
+  document.getElementById('loading').remove();
+
+  const $ = id => document.getElementById(id);
+  let lastStats = 0;
+  function frame() {
+    const now = performance.now();
+    const realUs = (now - start) * 1000;
+    call('emurun', null, ['number'], [realUs]);
+
+    const n = call('emuflipcount', 'number');
+    const p = call('emuflips', 'number');
+    for (let i = 0; i < n; i++) {
+      const us = fw.HEAPF64[(p >> 3) + i * 2];
+      const packed = fw.HEAP32[(p >> 2) + i * 4 + 2];
+      pending.push([us, packed & 255, (packed >> 8) & 255, (packed >> 16) & 1]);
+    }
+    call('emuclearflips');
+
+    // Show each flip at the moment the firmware made it
+    let k = 0;
+    while (k < pending.length && pending[k][0] <= realUs) {
+      const [us, x, y, color] = pending[k++];
+      const i = y * cols + x;
+      shown[i] = color;
+      flipStart[i] = start + us / 1000;
+    }
+    if (k) pending.splice(0, k);
+    draw(now);
+
+    if (now - lastStats > 250) {
+      lastStats = now;
+      const s = JSON.parse(call('emustatus', 'string'));
+      $('s-pulses').textContent = s.pulses.toLocaleString('nl-NL');
+      $('s-pulse').textContent = s.pulses ? (s.pulse_min_us === s.pulse_max_us ? s.pulse_min_us.toFixed(1) : s.pulse_min_us.toFixed(1) + '–' + s.pulse_max_us.toFixed(1)) + ' µs' : '-';
+      $('s-boards').textContent = s.boards_found + ' van ' + s.boards + (s.fault ? ' · storing' : '');
+      $('s-boards').className = s.fault || s.boards_found !== s.boards ? 'bad' : 'ok';
+      const rules = s.rule1 + s.rule2 + s.rule5;
+      $('s-rules').textContent = rules;
+      $('s-rules').className = rules ? 'bad' : 'ok';
+      const ahead = Math.max(0, call('emunow', 'number') - realUs) / 1000;
+      $('s-ahead').textContent = ahead.toFixed(0) + ' ms';
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
