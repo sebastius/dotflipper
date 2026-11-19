@@ -7,7 +7,12 @@
 // Hilbert curve: a space filling line that folds through the whole screen.
 // It is drawn segment by segment, then erased the same way, and again.
 
-#define HILBERT_N     16   // Points per side, 2 dots apart
+// Points per side, 2 dots apart: the largest power of two that fits, 16 on 32x32 and 32 on 64x64
+static constexpr uint16_t hilbertsize(uint16_t n) { return n * 2 > min(COLS, ROWS) / 2 ? n : hilbertsize(n * 2); }
+#define HILBERT_N     hilbertsize(1)
+#define HILBERT_STEPS (HILBERT_N * HILBERT_N / 256)  // Segments per frame: a larger curve takes as long as on 32x32
+#define HILBERT_LEFT  ((COLS - 2 * HILBERT_N + 1) / 2)
+#define HILBERT_TOP   ((ROWS - 2 * HILBERT_N + 1) / 2)
 #define HILBERT_PAUSE 60   // Frames between drawing and erasing
 
 static uint16_t segment;
@@ -46,14 +51,17 @@ static void hilbertstep() {
     waiting--;
     return;
   }
-  int16_t x0, y0, x1, y1;
-  hilbertpoint(segment, x0, y0);
-  hilbertpoint(segment + 1, x1, y1);
-  drawline(2 * x0, 2 * y0, 2 * x1, 2 * y1, !erasing);
-  if (++segment >= HILBERT_N * HILBERT_N - 1) {
-    segment = 0;
-    erasing = !erasing;
-    waiting = HILBERT_PAUSE;
+  for (uint8_t i = 0; i < HILBERT_STEPS; i++) {
+    int16_t x0, y0, x1, y1;
+    hilbertpoint(segment, x0, y0);
+    hilbertpoint(segment + 1, x1, y1);
+    drawline(HILBERT_LEFT + 2 * x0, HILBERT_TOP + 2 * y0, HILBERT_LEFT + 2 * x1, HILBERT_TOP + 2 * y1, !erasing);
+    if (++segment >= HILBERT_N * HILBERT_N - 1) {
+      segment = 0;
+      erasing = !erasing;
+      waiting = HILBERT_PAUSE;
+      return;
+    }
   }
 }
 

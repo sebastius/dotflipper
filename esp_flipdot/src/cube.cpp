@@ -36,8 +36,9 @@ static void cubestep() {
     t = x * cosf(ay) + z * sinf(ay); z = -x * sinf(ay) + z * cosf(ay); x = t; // around y
     t = x * cosf(az) - y * sinf(az); y = x * sinf(az) + y * cosf(az); x = t;  // around z
 
-    // Perspective, the camera is 4 units away. Corners stay within 14 dots of the center.
-    float f = 18.0f / (z + 4.0f);
+    // Perspective, the camera is 4 units away. Corners stay within 14 dots of the center on 32x32,
+    // on a larger screen the cube grows along.
+    float f = 18.0f * min(COLS, ROWS) / 32 / (z + 4.0f);
     px[i] = roundf((COLS - 1) / 2.0f + x * f);
     py[i] = roundf((ROWS - 1) / 2.0f + y * f);
   }

@@ -7,11 +7,13 @@
 // Chaos game: dots at random spots that together form a fern (Barnsley) or a
 // Sierpinski triangle. The two take turns.
 
-#define CHAOS_POINTS_PER_FRAME 4
-#define CHAOS_POINTS           3000  // Then the other figure
+// On a larger screen the figures grow along, with as many more points as there are more dots
+#define CHAOS_SCALE            (min(COLS, ROWS) / 32)
+#define CHAOS_POINTS_PER_FRAME (4 * CHAOS_SCALE * CHAOS_SCALE)
+#define CHAOS_POINTS           (3000 * CHAOS_SCALE * CHAOS_SCALE)  // Then the other figure
 
 static bool fern = false;
-static uint16_t points;
+static uint32_t points;
 static float px, py;
 
 static void chaossetup() {
@@ -50,7 +52,7 @@ static void chaosstep() {
     }
     if (fern) {
       // The fern is about -2.2..2.7 wide and 0..10 high
-      setdot(roundf(COLS / 2 + px * 3.0f), roundf(ROWS - 1 - py * 3.1f), true);
+      setdot(roundf(COLS / 2 + px * 3.0f * CHAOS_SCALE), roundf(ROWS - 1 - py * 3.1f * CHAOS_SCALE), true);
     } else {
       setdot(roundf(px), roundf(py), true);
     }
