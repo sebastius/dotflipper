@@ -7,6 +7,8 @@
 
 One flip dot panel (32x32, two 32x16 halves) per board, 205 x 80 mm, two layers, all logic and drivers SMD.
 
+![3D render of the v3 board](pcb3d.jpeg)
+
 ## How it works
 
 - **Drivers:** six groups of eight lines. Each group has two 74HC595s on the same data, one feeding an
