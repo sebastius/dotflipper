@@ -24,7 +24,8 @@
 //    config.h       panel layout, features and settings
 //    pca9685.*      bit-banged I2C to the PCA9685 driver chips (v1 boards)
 //    i2cpins.h      direct access to the I2C pins (v1)
-//    shiftchain.*   the chain of 74HC595 shift registers (v3 boards, HARDWARE_V3)
+//    shiftchain.*   the chain of 74HC595 shift registers, the coil pulse from the RMT (v3 boards, HARDWARE_V3)
+//    pulsetest.cpp  test of the coil pulse on a bare ESP32-S3 (pio env v3-pulsetest)
 //    chainpins.h    direct access to the chain pins (v3)
 //    display.*      framebuffers and flipping dots (v1)
 //    display595.cpp flipping dots on the v3 boards

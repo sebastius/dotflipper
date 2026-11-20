@@ -17,6 +17,9 @@
 //  3. Everything is off between updates: nOE high and no 1 latched anywhere
 //  4. After an update every dot matches next_state
 //  5. Every pulse is PULSE_MICROS long, and between two pulses there is PULSE_GAP_MICROS of rest
+//
+// nOE comes from a model of the RMT once the firmware has handed it over: low for the length of
+// the pulse, then high for the rest, on the clock of the model, whatever the firmware does meanwhile.
 
 #include <stdio.h>
 
@@ -52,6 +55,13 @@ static bool anycoilended;
 static uint32_t pulseshortest = 0xFFFFFFFF, pulselongest;
 static uint32_t gapshortest = 0xFFFFFFFF;
 static long interruptat = -1;  // Pulse number that gets interrupted for a long time
+
+// The RMT
+static bool rmtowned;              // nOE comes from the RMT, GPIO writes don't reach the pin
+static bool rmtactive, rmtlow, rmtstuck;
+static uint16_t rmton, rmtrest;
+static uint64_t rmtlowend, rmtend;
+static void updatemodel();
 
 static void violation(const char *text) {
   if (violations++ < 5) printf("    OVERTREDING: %s\n", text);
@@ -94,10 +104,61 @@ static void updatemodel() {
   (void)nowon;
 }
 
-void setdata(bool high) { cycles += 4; pdata = high; }
+// The RMT catches up with the clock: nOE goes high exactly at the end of the pulse
+static void rmtupdate() {
+  if (!rmtactive || rmtstuck) return;
+  if (rmtlow && cycles >= rmtlowend) {
+    uint64_t now = cycles;
+    cycles = rmtlowend;
+    pnoe = true;
+    rmtlow = false;
+    updatemodel();
+    cycles = now;
+  }
+  if (!rmtlow && cycles >= rmtend) rmtactive = false;
+}
+
+bool pulsebegin(uint16_t on, uint16_t rest) {
+  rmtowned = true;
+  rmton = on;
+  rmtrest = rest;
+  return true;
+}
+
+bool pulsestart() {
+  cycles += 4;
+  rmtupdate();
+  if (!rmtowned) return false;
+  if (rmtactive) {
+    rule5 = true;
+    violation("puls gestart terwijl de vorige nog loopt");
+  }
+  rmtactive = rmtlow = true;
+  rmtlowend = cycles + (uint64_t)rmton * MHZ;
+  rmtend = rmtlowend + (uint64_t)rmtrest * MHZ;
+  pnoe = false;
+  updatemodel();
+  return true;
+}
+
+bool pulsebusy() {
+  cycles += 2;
+  rmtupdate();
+  return rmtactive;
+}
+
+void pulserelease() {
+  cycles += 4;
+  rmtowned = rmtactive = rmtlow = false;
+  pnoe = true;
+  updatemodel();
+}
+
+void setdata(bool high) { cycles += 4; rmtupdate(); pdata = high; }
 
 void setsclk(bool high) {
   cycles += 4;
+  rmtupdate();
   bool data = stuckdata || pdata;
   if (high && !psclk) {
     for (int b = hwboards - 1; b >= 0; b--) {
@@ -112,6 +173,7 @@ void setsclk(bool high) {
 
 void setlatch(bool high) {
   cycles += 4;
+  rmtupdate();
   if (high && !platch) {
     if (!pnoe) {
       rule1 = true;
@@ -125,12 +187,15 @@ void setlatch(bool high) {
 
 void setnoe(bool high) {
   cycles += 4;
+  rmtupdate();
+  if (rmtowned) return;  // The pin belongs to the RMT
   pnoe = high;
   updatemodel();
 }
 
 void setdirx1(bool high) {
   cycles += 4;
+  rmtupdate();
   if (high != pdirx1 && !pnoe) {
     rule1 = true;
     violation("DIR_X1 verandert terwijl nOE laag is");
@@ -141,6 +206,7 @@ void setdirx1(bool high) {
 
 void setdirrow(bool high) {
   cycles += 4;
+  rmtupdate();
   if (high != pdirrow && !pnoe) {
     rule1 = true;
     violation("DIR_ROW verandert terwijl nOE laag is");
@@ -149,8 +215,15 @@ void setdirrow(bool high) {
   updatemodel();
 }
 
+bool readnoe() {
+  cycles += 4;
+  rmtupdate();
+  return pnoe;
+}
+
 bool readreturn() {
   cycles += 4;
+  rmtupdate();
   return loopback && ff[hwboards - 1];
 }
 
@@ -161,6 +234,7 @@ uint32_t chaincycles() {
     cycles += 500 * MHZ;
     interruptat = -1;
   }
+  rmtupdate();
   return cycles;
 }
 
@@ -203,9 +277,10 @@ static void poweron(int boards, bool jp1) {
   maxcoils = 0;
   rule1 = rule2 = false;
   interruptat = -1;
+  rmtowned = rmtactive = rmtlow = rmtstuck = false;
   chainfault = false;
   chainboardsfound = -1;
-  chainstats = { 0, 0xFFFFFFFF, 0, 0 };
+  chainstats = { 0 };
 }
 
 static void start(int boards = CHAIN_BOARDS, bool jp1 = true) {
@@ -289,17 +364,47 @@ int main() {
     check(text, chainfault && coilcount == 0 && pnoe, &failures);
   }
 
-  printf("Puls duurt te lang\n");
+  printf("Firmware staat stil of crasht tijdens een puls\n");
   start();
-  interruptat = coilcount + 10;
+  pulseshortest = 0xFFFFFFFF;
+  pulselongest = 0;
+  interruptat = coilcount + 10;  // 500 us stil, midden in een puls
   memset(next_state, 1, sizeof(next_state));
   fullupdate();
-  long after = coilcount;
-  memset(next_state, 0, sizeof(next_state));
-  fullupdate();
-  flipdot(1, 1, 1);
-  printf("  langste puls: %.0f us, grens %d us\n", chainstats.pulsemax / (double)MHZ, PULSE_LIMIT_MICROS);
-  check("Noodstop: alles uit, er flipt daarna niets meer", chainfault && alloff() && coilcount == after, &failures);
+  printf("  pulsen met 500 us stilstand: %.1f tot %.1f us\n", pulseshortest / (double)MHZ, pulselongest / (double)MHZ);
+  check("500 us stilstand: puls blijft precies even lang, geen storing",
+        pulseshortest / (double)MHZ > PULSE_MICROS - 1 && pulselongest / (double)MHZ < PULSE_MICROS + 1 && !chainfault && matches(), &failures);
+
+  start();
+  pulselongest = 0;
+  {
+    uint32_t pattern[CHAIN_WORDS] = { 0 };
+    chainsetbit(pattern, 0, 0, 3);
+    chainsetbit(pattern, 0, 4, 5);
+    chainpulse(pattern, true);
+  }
+  cycles += 100000ULL * MHZ;  // The firmware never comes back
+  rmtupdate();
+  printf("  puls waarna de firmware nooit meer terugkomt: %.1f us\n", pulselongest / (double)MHZ);
+  check("Crash na de start van een puls: de RMT beëindigt hem op tijd", pnoe && pulselongest / (double)MHZ < PULSE_MICROS + 1, &failures);
+
+  printf("RMT hangt: de puls stopt niet vanzelf\n");
+  start();
+  pulselongest = 0;
+  memset(next_state, 1, sizeof(next_state));
+  {
+    uint32_t pattern[CHAIN_WORDS] = { 0 };
+    chainsetbit(pattern, 0, 0, 3);
+    chainsetbit(pattern, 0, 4, 5);
+    rmtstuck = true;
+    chainpulse(pattern, true);
+    long after = coilcount;
+    fullupdate();
+    flipdot(1, 1, 1);
+    printf("  langste puls voordat de firmware nOE terugpakt: %.0f us\n", pulselongest / (double)MHZ);
+    check("Die puls duurt niet langer dan 250 us", pulselongest / (double)MHZ < 250, &failures);
+    check("Noodstop: nOE terug en hoog, alles uit, er flipt daarna niets meer", chainfault && alloff() && coilcount == after, &failures);
+  }
 
   printf("Bewijs dat de controles werken\n");
   poweron(CHAIN_BOARDS, true);

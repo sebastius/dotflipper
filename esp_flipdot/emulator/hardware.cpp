@@ -5,6 +5,7 @@
 // on the rising edge of SCLK, a flip-flop to the next board on the falling edge, LATCH copies to the
 // outputs, an output is on when its latched bit is 1 and nOE is low, DIR picks 20 V or ground, JP1
 // closed on the last board. A dot flips when its line and its row are on, on opposite sides.
+// nOE comes from a model of the RMT once the firmware has handed it over.
 // The model also checks the rules of the simulator and counts what goes wrong.
 
 #include <map>
@@ -38,7 +39,8 @@ EmuOTA ArduinoOTA;
 static uint64_t cycles;
 uint64_t emucycles() { return cycles; }
 void emuadvance(uint64_t c) { cycles += c; }
-uint32_t chaincycles() { return (uint32_t)(cycles += 2); }
+static void rmtupdate();
+uint32_t chaincycles() { cycles += 2; rmtupdate(); return (uint32_t)cycles; }
 
 void configTzTime(const char *tz, const char *, const char *, const char *) {
   setenv("TZ", tz, 1);
@@ -107,10 +109,56 @@ static void updatemodel() {
   }
 }
 
-void setdata(bool high) { cycles += 4; pdata = high; }
+// The RMT on nOE: low for the pulse, then high for the rest, on the clock of the model.
+// It catches up with the clock on every call, nOE goes high exactly at the end of the pulse.
+static bool rmtowned, rmtactive, rmtlow;
+static uint16_t rmton, rmtrest;
+static uint64_t rmtlowend, rmtend;
+
+static void rmtupdate() {
+  if (!rmtactive) return;
+  if (rmtlow && cycles >= rmtlowend) {
+    uint64_t now = cycles;
+    cycles = rmtlowend;
+    pnoe = true;
+    rmtlow = false;
+    updatemodel();
+    cycles = now;
+  }
+  if (!rmtlow && cycles >= rmtend) rmtactive = false;
+}
+
+bool pulsebegin(uint16_t on, uint16_t rest) { rmtowned = true; rmton = on; rmtrest = rest; return true; }
+
+bool pulsestart() {
+  cycles += 4;
+  rmtupdate();
+  if (!rmtowned) return false;
+  if (rmtactive) rule5++;  // A pulse on top of a running one
+  rmtactive = rmtlow = true;
+  rmtlowend = cycles + (uint64_t)rmton * 240;
+  rmtend = rmtlowend + (uint64_t)rmtrest * 240;
+  pnoe = false;
+  updatemodel();
+  return true;
+}
+
+bool pulsebusy() { cycles += 2; rmtupdate(); return rmtactive; }
+
+void pulserelease() {
+  cycles += 4;
+  rmtowned = rmtactive = rmtlow = false;
+  pnoe = true;
+  updatemodel();
+}
+
+bool readnoe() { cycles += 4; rmtupdate(); return pnoe; }
+
+void setdata(bool high) { cycles += 4; rmtupdate(); pdata = high; }
 
 void setsclk(bool high) {
   cycles += 4;
+  rmtupdate();
   if (high && !psclk) {
     for (int b = BOARDS - 1; b >= 0; b--) {
       for (int i = 47; i > 0; i--) sr[b][i] = sr[b][i - 1];
@@ -124,6 +172,7 @@ void setsclk(bool high) {
 
 void setlatch(bool high) {
   cycles += 4;
+  rmtupdate();
   if (high && !platch) {
     if (!pnoe) rule1++;
     memcpy(latched, sr, sizeof(sr));
@@ -132,10 +181,17 @@ void setlatch(bool high) {
   platch = high;
 }
 
-void setnoe(bool high) { cycles += 4; pnoe = high; updatemodel(); }
+void setnoe(bool high) {
+  cycles += 4;
+  rmtupdate();
+  if (rmtowned) return;  // The pin belongs to the RMT
+  pnoe = high;
+  updatemodel();
+}
 
 void setdirx1(bool high) {
   cycles += 4;
+  rmtupdate();
   if (high != pdirx1 && !pnoe) rule1++;
   pdirx1 = high;
   updatemodel();
@@ -143,12 +199,13 @@ void setdirx1(bool high) {
 
 void setdirrow(bool high) {
   cycles += 4;
+  rmtupdate();
   if (high != pdirrow && !pnoe) rule1++;
   pdirrow = high;
   updatemodel();
 }
 
-bool readreturn() { cycles += 4; return ff[BOARDS - 1]; }  // JP1 closed on the last board
+bool readreturn() { cycles += 4; rmtupdate(); return ff[BOARDS - 1]; }  // JP1 closed on the last board
 
 // Web server: the page sends the requests of the web interface here
 
@@ -243,6 +300,7 @@ EXPORT void emurun(double until) {
     uint64_t before = cycles;
     loop();
     if (cycles - before < 240000) cycles = before + 240000;
+    rmtupdate();
   }
 }
 

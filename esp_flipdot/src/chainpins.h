@@ -23,6 +23,7 @@ static inline void IRAM_ATTR setnoe(bool high)    { chainpin(CHAIN_PIN_NOE, high
 static inline void IRAM_ATTR setdirx1(bool high)  { chainpin(CHAIN_PIN_DIR_X1, high); }
 static inline void IRAM_ATTR setdirrow(bool high) { chainpin(CHAIN_PIN_DIR_ROW, high); }
 static inline bool IRAM_ATTR readreturn()         { return REG_READ(GPIO_IN_REG) & (1UL << CHAIN_PIN_RETURN); }
+static inline bool IRAM_ATTR readnoe()            { return REG_READ(GPIO_IN_REG) & (1UL << CHAIN_PIN_NOE); }  // The pad itself
 static inline uint32_t IRAM_ATTR chaincycles()    { return esp_cpu_get_cycle_count(); }
 
 #endif

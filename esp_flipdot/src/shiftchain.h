@@ -22,12 +22,9 @@
 #define CHAIN_WORDS       ((CHAIN_BITS + 31) / 32)
 #define CHAIN_MAX_BOARDS  8
 
-// Counters since startup. Pulses are measured from nOE low until nOE high, in CPU cycles.
+// Counters since startup. The pulse itself is timed by the RMT, its length is PULSE_MICROS.
 struct ChainStats {
   uint32_t pulses;
-  uint32_t pulsemin;
-  uint32_t pulsemax;
-  uint64_t pulsetotal;
 };
 
 extern ChainStats chainstats;
@@ -35,13 +32,16 @@ extern bool chainfault;          // Set by chainstop() or a failed board count, 
 extern int8_t chainboardsfound;  // Boards counted over the return line, 0 when the bit didn't come back
 extern uint32_t chaincyclesperus;
 
-void chainbegin();     // First thing at startup: everything off, chain empty, count the boards
+// First thing at startup: everything off, chain empty, count the boards, hand nOE to the RMT.
+// needboards false: flip also when the count is wrong, only for testing without boards.
+void chainbegin(bool needboards = true);
 int8_t chaincount();   // Sends one bit around the chain, returns the number of boards or 0
 void chainclear();     // Shifts zeros into every 595 and latches them
-void chainstop();      // Everything off and nothing flips anymore
+void chainstop();      // nOE back from the RMT and high, everything off, nothing flips anymore
 
 // One coil pulse with the pattern in the 595s. color true: lines to ground and rows to 20 V.
-// Returns false when nothing was pulsed because of a fault.
+// Returns as soon as the RMT has started the pulse; the next call shifts during it and waits for
+// the pulse and its rest to end before it latches. Returns false when nothing was pulsed because of a fault.
 bool chainpulse(const uint32_t pattern[CHAIN_WORDS], bool color);
 
 static inline void chainsetbit(uint32_t pattern[CHAIN_WORDS], uint8_t board, uint8_t group, uint8_t bit) {

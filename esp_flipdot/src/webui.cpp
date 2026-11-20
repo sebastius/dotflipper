@@ -313,17 +313,16 @@ static void sendstate() {
 
   doc["uptime"] = millis() / 1000;
 
-  uint32_t mhz = getCpuFrequencyMhz();
 #ifdef HARDWARE_V3
   JsonObject chain = doc["chain"].to<JsonObject>();
   chain["boards"] = CHAIN_BOARDS;
   chain["boards_found"] = chainboardsfound;
   chain["fault"] = chainfault;
   chain["pulses"] = chainstats.pulses;
-  chain["pulse_min_us"] = chainstats.pulses ? chainstats.pulsemin / mhz : 0;
-  chain["pulse_max_us"] = chainstats.pulsemax / mhz;
-  chain["pulse_avg_us"] = chainstats.pulses ? (uint32_t)(chainstats.pulsetotal / chainstats.pulses / mhz) : 0;
+  chain["pulse_us"] = PULSE_MICROS;  // Timed by the RMT
+  chain["gap_us"] = PULSE_GAP_MICROS;
 #else
+  uint32_t mhz = getCpuFrequencyMhz();
   JsonObject i2c = doc["i2c"].to<JsonObject>();
   i2c["writes"] = i2cstats.writes;
   i2c["nack"] = i2cstats.nack;

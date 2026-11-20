@@ -5,8 +5,8 @@ The firmware for the v3 boards, compiled to WebAssembly and running on a model o
 
 - The real code runs: `shiftchain.cpp` and `display595.cpp` drive the chain, the player, clock,
   animations and web interface are the same as on the ESP32-S3. Only WiFi, OTA and the network are left out.
-- `hardware.cpp` is the hardware: the 595s, flip-flops, latch, DIR and nOE of eight boards, the same model
-  as `simulate/simulate595.cpp`. A dot only flips when it gets a real pulse. The page shows the pulse
+- `hardware.cpp` is the hardware: the 595s, flip-flops, latch, DIR and nOE of eight boards and the RMT that
+  makes the pulse on nOE, the same model as `simulate/simulate595.cpp`. A dot only flips when it gets a real pulse. The page shows the pulse
   length and counts rule breaks (LATCH or DIR with nOE low, more than one coil per board, wrong pulse length).
 - Time is virtual: the cycle counter of a 240 MHz ESP32-S3, kept in step with the clock of the browser.
   The flips show at the moment the firmware makes them, so the speed on screen is the real speed.

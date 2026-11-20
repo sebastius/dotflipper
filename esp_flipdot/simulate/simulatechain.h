@@ -10,4 +10,11 @@ void setnoe(bool high);
 void setdirx1(bool high);
 void setdirrow(bool high);
 bool readreturn();
+bool readnoe();  // The level on the nOE pin
 uint32_t chaincycles();
+
+// The RMT on nOE: one pulse of on us with nOE low, then rest us high, timed by the model
+bool pulsebegin(uint16_t on, uint16_t rest);
+bool pulsestart();
+bool pulsebusy();
+void pulserelease();  // nOE back to the CPU, held high
