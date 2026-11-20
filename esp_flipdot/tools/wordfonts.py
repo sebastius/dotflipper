@@ -4,8 +4,9 @@
     python3 tools/wordfonts.py <folder with the font files>
 
 The font files are not in this repository, only the bitmaps made from them. Get them from the links
-below. Every font is rendered large, its pixel grid is measured from the strokes, and each grid cell
-is sampled in the middle: that gives the font at its own resolution, dot for dot.
+below; authors, licenses and what they mean for the bitmaps are in tools/fonts/README.md. Every font is
+rendered large, its pixel grid is measured from the strokes, and each grid cell is sampled in the
+middle: that gives the font at its own resolution, dot for dot.
 """
 
 import os
@@ -19,13 +20,14 @@ BIG = 240
 # id, name in the web interface, file, source and license
 FONTS = [
     ('pixel14', 'Groot', '14px-pixel.otf',
-     '"14px Pixel", https://fontstruct.com/fontstructions/show/1029993, CC BY-SA 3.0'),
+     '"14px Pixel", https://fontstruct.com/fontstructions/show/1029993, CC BY-SA 3.0; these bitmaps CC BY-SA 4.0'),
     ('bold9', 'Vet', 'Ithaca-LVB75.ttf',
-     'derived from "Ithaca" (c) 2025 GGBotNet, https://ggbot.net, SIL Open Font License 1.1'),
+     'derived from "Ithaca", Copyright (c) 2025 GGBotNet (https://ggbot.net), with Reserved Font Name "Ithaca". '
+     'SIL Open Font License 1.1, see tools/fonts/OFL-Ithaca.txt. A Modified Version, so not called Ithaca'),
     ('serif7', 'Schreef', 'PixelatedEleganceRegular-ovawB.ttf',
      '"Pixelated Elegance" by GGBotNet, https://www.fontspace.com/pixelated-elegance-font-f126145, CC0'),
     ('thin7', 'Dun', 'MinecraftRegular-Bmg3.otf',
-     '"Minecraft" font, https://www.fontspace.com/minecraft-font-f28180, public domain'),
+     '"Minecraft" fan font, https://www.fontspace.com/minecraft-font-f28180, public domain, not affiliated with Mojang'),
 ]
 
 
@@ -88,7 +90,8 @@ def main():
     files = {name: os.path.join(root, name) for root, _, names in os.walk(folder) for name in names}
     out = ['#pragma once', '',
            '// Made by tools/wordfonts.py, do not edit. The letters of the word clock from pixel fonts, at their own',
-           '// resolution: rows[] has the leftmost dot in the most significant used bit, like fonts.h.', '',
+           '// resolution: rows[] has the leftmost dot in the most significant used bit, like fonts.h.',
+           '// Authors and licenses: tools/fonts/README.md. Each font keeps its own license, noted above its glyphs.', '',
            '#include <stdint.h>', '',
            'struct BitmapGlyph {', '  char letter;', '  uint8_t width;', '  uint16_t rows[16];', '};', '',
            'struct BitmapFont {', '  const char *id;', '  const char *name;  // In the web interface',

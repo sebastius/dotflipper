@@ -2,6 +2,7 @@
 
 // Made by tools/wordfonts.py, do not edit. The letters of the word clock from pixel fonts, at their own
 // resolution: rows[] has the leftmost dot in the most significant used bit, like fonts.h.
+// Authors and licenses: tools/fonts/README.md. Each font keeps its own license, noted above its glyphs.
 
 #include <stdint.h>
 
@@ -18,7 +19,7 @@ struct BitmapFont {
   const BitmapGlyph *glyphs;
 };
 
-// "14px Pixel", https://fontstruct.com/fontstructions/show/1029993, CC BY-SA 3.0
+// "14px Pixel", https://fontstruct.com/fontstructions/show/1029993, CC BY-SA 3.0; these bitmaps CC BY-SA 4.0
 const BitmapGlyph pixel14Glyphs[] = {
   { 'A', 6, { 0x000C, 0x001E, 0x003F, 0x0033, 0x0033, 0x0033, 0x003F, 0x003F, 0x0033, 0x0033, 0x0033, 0x0033, 0x0033, 0x0033 } },
   { 'C', 6, { 0x001E, 0x003F, 0x0033, 0x0033, 0x0030, 0x0030, 0x0030, 0x0030, 0x0030, 0x0030, 0x0033, 0x0033, 0x003F, 0x001E } },
@@ -43,7 +44,7 @@ const BitmapGlyph pixel14Glyphs[] = {
   { 0, 0, { 0 } },
 };
 
-// derived from "Ithaca" (c) 2025 GGBotNet, https://ggbot.net, SIL Open Font License 1.1
+// derived from "Ithaca", Copyright (c) 2025 GGBotNet (https://ggbot.net), with Reserved Font Name "Ithaca". SIL Open Font License 1.1, see tools/fonts/OFL-Ithaca.txt. A Modified Version, so not called Ithaca
 const BitmapGlyph bold9Glyphs[] = {
   { 'A', 5, { 0x000E, 0x001B, 0x001B, 0x001B, 0x001B, 0x001F, 0x001B, 0x001B, 0x001B } },
   { 'C', 5, { 0x000E, 0x001B, 0x0018, 0x0018, 0x0018, 0x0018, 0x0018, 0x001B, 0x000E } },
@@ -93,7 +94,7 @@ const BitmapGlyph serif7Glyphs[] = {
   { 0, 0, { 0 } },
 };
 
-// "Minecraft" font, https://www.fontspace.com/minecraft-font-f28180, public domain
+// "Minecraft" fan font, https://www.fontspace.com/minecraft-font-f28180, public domain, not affiliated with Mojang
 const BitmapGlyph thin7Glyphs[] = {
   { 'A', 5, { 0x000E, 0x0011, 0x001F, 0x0011, 0x0011, 0x0011, 0x0011 } },
   { 'C', 5, { 0x000E, 0x0011, 0x0010, 0x0010, 0x0010, 0x0011, 0x000E } },
