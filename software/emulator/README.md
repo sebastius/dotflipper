@@ -21,4 +21,4 @@ Build:
   plays the maze and prints the screen. With `SANITIZE=1` it checks every memory access.
 
 The workflow `.github/workflows/emulator.yml` runs the simulations, builds the emulator and puts it on
-GitHub Pages after every push to master that changes `esp_flipdot/`.
+GitHub Pages after every push to master that changes `software/`.

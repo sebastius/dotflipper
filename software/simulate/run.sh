@@ -21,7 +21,9 @@ done
 if [ -n "$1" ]; then
   mkdir "$out/old"
   for f in display.cpp display.h pca9685.cpp pca9685.h config.h i2cpins.h; do
-    git show "$1:esp_flipdot/src/$f" > "$out/old/$f" 2>/dev/null || rm -f "$out/old/$f"
+    # The firmware lived in esp_flipdot/ before it moved to software/
+    git show "$1:software/src/$f" > "$out/old/$f" 2>/dev/null ||
+      git show "$1:esp_flipdot/src/$f" > "$out/old/$f" 2>/dev/null || rm -f "$out/old/$f"
   done
   # Older versions lack the counters, the emergency stop or the bit-banged bus
   flags=""
