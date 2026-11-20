@@ -107,7 +107,7 @@ static void updateclock() {
   if (!clockdirty && now.tm_min == lastminute && (!ticking || now.tm_sec == lastsecond)) {
     return;
   }
-  clockdraw(now, settings.clockStyle, settings.clockSeconds);
+  clockdraw(now, settings.clockStyle, settings.clockSeconds, settings.clockFont);
   if (now.tm_hour != lasthour) {
     forcefullupdate();  // Once an hour flip every dot, in case one got stuck
   } else if (!clockdirty && !ticking && settings.clockTransition != TRANSITION_NONE) {

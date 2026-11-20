@@ -1,6 +1,7 @@
 #include <Preferences.h>
 
 #include "flipsettings.h"
+#include "clockface.h"
 
 Settings settings;
 
@@ -13,6 +14,7 @@ static void defaultsettings() {
   settings.clockEnabled = true;
   settings.clockStyle = CLOCK_BIG;
   settings.clockSeconds = false;
+  settings.clockFont = 0;
   settings.clockTransition = TRANSITION_NONE;
   settings.interval = 15;
   settings.animationsPerBreak = 1;
@@ -28,6 +30,7 @@ void settingstojson(JsonObject json) {
   clock["enabled"] = settings.clockEnabled;
   clock["style"] = clockstyles[settings.clockStyle];
   clock["seconds"] = settings.clockSeconds;
+  clock["font"] = clockfontid(settings.clockFont);
   clock["transition"] = transitions[settings.clockTransition];
   clock["interval"] = settings.interval;
   clock["animations_per_break"] = settings.animationsPerBreak;
@@ -59,6 +62,13 @@ void settingsfromjson(JsonObjectConst json) {
   }
   if (clock["seconds"].is<bool>()) {
     settings.clockSeconds = clock["seconds"];
+  }
+  if (clock["font"].is<const char *>()) {
+    for (uint8_t i = 0; i < clockfonts(); i++) {
+      if (strcmp(clock["font"], clockfontid(i)) == 0 && clockfontfits(i)) {
+        settings.clockFont = i;
+      }
+    }
   }
   if (clock["transition"].is<const char *>()) {
     for (uint8_t i = 0; i < TRANSITIONS; i++) {

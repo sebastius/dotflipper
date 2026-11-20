@@ -6,6 +6,7 @@
 #include "animation.h"
 #include "flipsettings.h"
 #include "player.h"
+#include "clockface.h"
 #ifdef HARDWARE_V3
 #include "shiftchain.h"
 #else
@@ -99,6 +100,10 @@ button:hover { border-color: var(--accent); }
         <label><input type="radio" name="style" value="binary">Binair</label>
       </div>
     </div>
+    <div class="row clockonly" id="fontRow">
+      <label class="grow" for="font">Lettertype</label>
+      <select id="font"></select>
+    </div>
     <div class="row clockonly" id="secondsRow">
       <label class="grow" for="seconds">Secondewijzer</label>
       <span class="switch"><input type="checkbox" id="seconds"><span></span></span>
@@ -144,7 +149,7 @@ button:hover { border-color: var(--accent); }
 
 <script>
 const $ = s => document.querySelector(s);
-let catalog = [], settings = null;
+let catalog = [], settings = null, fonts = [];
 
 async function api(path, body) {
   const options = body === undefined ? {} :
@@ -189,6 +194,7 @@ function updateClockVisibility() {
   const c = settings.clock;
   document.querySelectorAll('.clockonly').forEach(e => e.style.display = c.enabled ? '' : 'none');
   $('#secondsRow').style.display = c.enabled && c.style === 'analog' ? '' : 'none';
+  $('#fontRow').style.display = c.enabled && c.style === 'words' && fonts.length > 1 ? '' : 'none';
   $('#perBreakRow').style.display = c.enabled && c.interval > 0 ? '' : 'none';
   const ticking = c.style === 'seconds' || c.style === 'binary' || (c.style === 'analog' && c.seconds);
   $('#transitionRow').style.display = c.enabled && !ticking ? '' : 'none';
@@ -264,6 +270,9 @@ function render() {
     r.checked = r.value === c.style;
     r.onchange = () => save({ clock: { style: r.value } });
   });
+  $('#font').replaceChildren(...fonts.map(f => new Option(f.name, f.id)));
+  $('#font').value = c.font;
+  $('#font').onchange = e => save({ clock: { font: e.target.value } });
   $('#seconds').checked = c.seconds;
   $('#seconds').onchange = e => save({ clock: { seconds: e.target.checked } });
   $('#transition').value = c.transition;
@@ -289,6 +298,7 @@ function render() {
 api('/api/state').then(state => {
   catalog = state.catalog;
   settings = state.settings;
+  fonts = state.clock_fonts || [];
   render();
   showStatus(state);
   setInterval(() => api('/api/state').then(showStatus).catch(() => {}), 3000);
@@ -335,6 +345,15 @@ static void sendstate() {
 #endif
 
   settingstojson(doc["settings"].to<JsonObject>());
+
+  JsonArray fonts = doc["clock_fonts"].to<JsonArray>();  // Only the fonts that fit this screen
+  for (uint8_t i = 0; i < clockfonts(); i++) {
+    if (clockfontfits(i)) {
+      JsonObject f = fonts.add<JsonObject>();
+      f["id"] = clockfontid(i);
+      f["name"] = clockfontname(i);
+    }
+  }
 
   JsonArray catalog = doc["catalog"].to<JsonArray>();
   for (uint8_t i = 0; i < ANIMATION_COUNT; i++) {

@@ -9,7 +9,7 @@
 //
 // {
 //   "power": true,
-//   "clock": { "enabled": true, "style": "big", "seconds": false, "transition": "none",
+//   "clock": { "enabled": true, "style": "big", "seconds": false, "font": "classic", "transition": "none",
 //              "interval": 15, "animations_per_break": 1 },
 //   "animations": { "gol": { "enabled": true, "speed": 100, "duration": 30 }, ... }
 // }
@@ -33,6 +33,7 @@ struct Settings {
   bool clockEnabled;        // Off plays animations all the time
   ClockStyle clockStyle;
   bool clockSeconds;        // Second hand on the analog clock
+  uint8_t clockFont;        // Font of the word clock, see clockface.h; 0 is the classic one
   Transition clockTransition;  // When the minute changes
   uint8_t interval;         // Minutes between animation breaks, aligned to the hour. 0 is clock only
   uint8_t animationsPerBreak;

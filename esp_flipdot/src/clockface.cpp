@@ -3,6 +3,7 @@
 #include "config.h"
 #include "display.h"
 #include "fonts.h"
+#include "wordfonts.h"
 #include "clockface.h"
 
 void clocksetup() {
@@ -10,8 +11,8 @@ void clocksetup() {
 }
 
 // The faces are drawn on a 32x32 face (two panels of 32x16). On a larger screen every dot of the
-// face becomes a block of SCALE x SCALE dots, centered: on 64x64 the face fills the screen and lines
-// that stayed clear of the seam between two panels still do. The analog clock uses every dot.
+// face becomes a block of SCALE x SCALE dots, centered: on 64x64 the face fills the screen. The analog
+// clock and the word clock with a font from wordfonts.h use every dot.
 
 #define FACE  32
 #define SCALE (min(COLS, ROWS) / FACE)
@@ -159,7 +160,87 @@ static void drawword(const char *word, uint8_t y0) {
   }
 }
 
-static void drawwords(const struct tm &now) {
+// Fonts from wordfonts.h, at the resolution of the screen
+
+static const BitmapGlyph *bitmapglyph(const BitmapFont &font, char letter) {
+  for (const BitmapGlyph *g = font.glyphs; g->letter; g++) {
+    if (g->letter == letter) {
+      return g;
+    }
+  }
+  return nullptr;
+}
+
+static int16_t bitmapwidth(const BitmapFont &font, const char *word) {
+  int16_t width = -1;
+  for (const char *c = word; *c; c++) {
+    const BitmapGlyph *g = bitmapglyph(font, *c);
+    width += (g ? g->width : 0) + 1;
+  }
+  return width;
+}
+
+static uint8_t bitmapgap(const BitmapFont &font) {
+  // Rows between lines: half a letter, less when four lines wouldn't fit otherwise
+  uint8_t gap = max(2, font.height / 2);
+  return min((int)gap, (ROWS - 4 * font.height) / 3);
+}
+
+static void drawbitmapword(const BitmapFont &font, const char *word, int16_t y0) {
+  int16_t x0 = (COLS - bitmapwidth(font, word)) / 2;
+  for (const char *c = word; *c; c++) {
+    const BitmapGlyph *g = bitmapglyph(font, *c);
+    if (!g) {
+      continue;
+    }
+    for (uint8_t y = 0; y < font.height; y++) {
+      for (uint8_t x = 0; x < g->width; x++) {
+        setdot(x0 + x, y0 + y, (g->rows[y] >> (g->width - 1 - x)) & 1);
+      }
+    }
+    x0 += g->width + 1;
+  }
+}
+
+uint8_t clockfonts() {
+  return 1 + BITMAP_FONTS;
+}
+
+const char *clockfontid(uint8_t font) {
+  return font == 0 || font > BITMAP_FONTS ? "classic" : bitmapFonts[font - 1].id;
+}
+
+const char *clockfontname(uint8_t font) {
+  return font == 0 || font > BITMAP_FONTS ? "Klassiek" : bitmapFonts[font - 1].name;
+}
+
+bool clockfontfits(uint8_t font) {
+  if (font == 0) {
+    return true;
+  }
+  if (font > BITMAP_FONTS) {
+    return false;
+  }
+  const BitmapFont &f = bitmapFonts[font - 1];
+  if (4 * f.height + 3 * 2 > ROWS) {
+    return false;
+  }
+  for (const char *word : hourwords) {
+    if (bitmapwidth(f, word) > COLS) {
+      return false;
+    }
+  }
+  for (const auto &words : minutewords) {
+    for (const char *word : words) {
+      if (word && bitmapwidth(f, word) > COLS) {
+        return false;
+      }
+    }
+  }
+  return bitmapwidth(f, "UUR") <= COLS;
+}
+
+static void drawwords(const struct tm &now, uint8_t font) {
   uint8_t minutes = now.tm_min + 2;  // 2 or less rounds down, 3 or more up: 58 is already the next hour
   uint8_t hour = now.tm_hour + minutes / 60;
   uint8_t five = (minutes % 60) / 5;
@@ -176,8 +257,17 @@ static void drawwords(const struct tm &now) {
     words[count++] = "UUR";
   }
 
-  // Lines are 8 rows apart, centered on the face. With 2 or 4 lines that keeps every line clear of
-  // the seams between the panels; 3 lines sit 4 rows lower, so the middle one crosses a seam.
+  if (font > 0 && clockfontfits(font)) {
+    const BitmapFont &f = bitmapFonts[font - 1];
+    uint8_t gap = bitmapgap(f);
+    int16_t top = (ROWS - (count * f.height + (count - 1) * gap)) / 2;
+    for (uint8_t i = 0; i < count; i++) {
+      drawbitmapword(f, words[i], top + i * (f.height + gap));
+    }
+    return;
+  }
+
+  // Classic: lines 8 rows apart on the 32x32 face, centered
   uint8_t top = (FACE - (count * 8 - 1)) / 2;
   for (uint8_t i = 0; i < count; i++) {
     drawword(words[i], top + i * 8);
@@ -208,14 +298,14 @@ static void drawbinary(const struct tm &now) {
   }
 }
 
-void clockdraw(const struct tm &now, ClockStyle style, bool seconds) {
+void clockdraw(const struct tm &now, ClockStyle style, bool seconds, uint8_t font) {
   memset(next_state, 0, sizeof(next_state));
   switch (style) {
     case CLOCK_BINARY:
       drawbinary(now);
       break;
     case CLOCK_WORDS:
-      drawwords(now);
+      drawwords(now, font);
       break;
     case CLOCK_SECONDS:
       drawmedpair(now.tm_hour, now.tm_min, MEDFONT_COLON, 0);
