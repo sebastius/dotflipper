@@ -31,7 +31,7 @@
 //    display595.cpp flipping dots on the v3 boards
 //    pictures.h     bitmaps
 //    flipsettings.* settings from the web interface, stored in flash
-//    player.*       decides what is on the screen: clock, animations or nothing
+//    player.*       decides what is on the screen: clock, animations, a game or nothing
 //    webui.*        web interface and JSON API on http://flipdot.local
 //    clockface.*    clock faces: big, time + date, analog, words, seconds and binary, NTP
 //    transition.*   transitions when the minute changes
@@ -60,6 +60,12 @@
 //    snow.cpp       snow that piles up
 //    lightning.cpp  lightning
 //    metaballs.cpp  outlines of melting blobs
+//    game.*         games: buttons per player from the web interface, start, game over and score
+//    snake.cpp      Snake
+//    tron.cpp       light cycles against each other or the computer
+//    pong.cpp       Pong
+//    breakout.cpp   Breakout
+//    tetris.cpp     Tetris
 //    wifisetup.*    WiFiManager and OTA updates
 //    udpdisplay.*   show framebuffers received over UDP (NETWORK)
 //

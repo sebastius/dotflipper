@@ -74,7 +74,7 @@ const uint8_t font9[5] = {
     0b111,
 };
 
-const uint8_t *fontDigits[10] = {
+const uint8_t *const fontDigits[10] = {  // const: every file that includes this gets its own copy
     font0,
     font1,
     font2,

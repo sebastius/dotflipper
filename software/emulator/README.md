@@ -11,14 +11,16 @@ The firmware for the v3 boards, compiled to WebAssembly and running on a model o
 - Time is virtual: the cycle counter of a 240 MHz ESP32-S3, kept in step with the clock of the browser.
   The flips show at the moment the firmware makes them, so the speed on screen is the real speed.
 - The web interface runs in a frame; its requests go to the web server of the firmware instead of the
-  network. Settings are kept in the localStorage of the browser.
+  network. Settings are kept in the localStorage of the browser. Keys pressed on the page go to the game
+  controller in the frame.
 
 Build:
 
 - `./build.sh` needs `emcc` from [emsdk](https://emscripten.org) 3.1.74 and writes `web/firmware.js` and `.wasm`.
   Serve `web/` with any web server, for example `python3 -m http.server -d web`.
 - `./build.sh native` makes a test program for this PC: `./native 30 maze` runs 30 virtual seconds,
-  plays the maze and prints the screen. With `SANITIZE=1` it checks every memory access.
+  plays the maze and prints the screen; `./native 60 game:tetris` plays a game with random buttons.
+  With `SANITIZE=1` it checks every memory access.
 
 The workflow `.github/workflows/emulator.yml` runs the simulations, builds the emulator and puts it on
 GitHub Pages after every push to master that changes `software/`.

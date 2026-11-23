@@ -330,15 +330,23 @@ int main(int argc, char **argv) {
   emustart();
   double t = 0;
   for (; t < 2e6; t += 50000) emurun(t);
-  if (argc > 2) {  // Animation to play, with its id
+  // Animation to play, with its id, or game:id for a game with random buttons for every player
+  bool game = argc > 2 && strncmp(argv[2], "game:", 5) == 0;
+  if (argc > 2) {
     char query[64];
-    snprintf(query, sizeof(query), "id=%s", argv[2]);
-    emurequest("POST", "/api/play", query, "");
-    printf("play %s: %d\n", argv[2], emureplycode());
+    snprintf(query, sizeof(query), "id=%s", argv[2] + (game ? 5 : 0));
+    emurequest("POST", game ? "/api/game" : "/api/play", query, "");
+    printf("%s %s: %d\n", game ? "game" : "play", argv[2], emureplycode());
   }
   for (; t < seconds * 1e6; t += 50000) {
     emurun(t);
     emuclearflips();
+    if (game && rand() % 4 == 0) {
+      char query[64];
+      int button = 1 << (rand() % 6);
+      snprintf(query, sizeof(query), "p=%d&b=%d&d=%d", rand() % 4, rand() % 2 ? button : 0, button);
+      emurequest("POST", "/api/input", query, "");
+    }
   }
   for (int y = 0; y < ROWS; y++) {
     for (int x = 0; x < COLS; x++) putchar(emudot(x, y) ? '#' : '.');

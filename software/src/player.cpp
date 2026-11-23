@@ -5,9 +5,10 @@
 #include "flipsettings.h"
 #include "clockface.h"
 #include "transition.h"
+#include "game.h"
 #include "player.h"
 
-enum PlayerState { SHOWING_OFF, SHOWING_CLOCK, SHOWING_ANIMATION };
+enum PlayerState { SHOWING_OFF, SHOWING_CLOCK, SHOWING_ANIMATION, SHOWING_GAME };
 
 static PlayerState state = SHOWING_OFF;
 static bool preview;
@@ -48,7 +49,7 @@ static void startanimation(uint8_t index) {
 }
 
 static void showclock() {
-  if (state == SHOWING_ANIMATION) {
+  if (state == SHOWING_ANIMATION || state == SHOWING_GAME) {
     ClearScreen();
   }
   preview = false;
@@ -192,6 +193,8 @@ void playerloop() {
     updateclock();
   } else if (state == SHOWING_ANIMATION) {
     updateanimation();
+  } else if (state == SHOWING_GAME && !gameloop()) {
+    showdefault();  // Nobody plays anymore
   }
 }
 
@@ -208,6 +211,23 @@ void playerpreview(uint8_t index) {
   preview = true;
 }
 
+void playergame(uint8_t index) {
+  if (!settings.power) {
+    return;
+  }
+  breakleft = 0;
+  preview = false;
+  transitioning = false;
+  state = SHOWING_GAME;
+  gamestart(index);
+}
+
+void playerstop() {
+  if (state == SHOWING_GAME) {
+    showdefault();
+  }
+}
+
 String playerstatus() {
   if (driverfault()) {
     return "fault";
@@ -219,6 +239,8 @@ String playerstatus() {
       return "clock";
     case SHOWING_ANIMATION:
       return animations[current]->id;
+    case SHOWING_GAME:
+      return gamecurrent()->id;
   }
   return "";
 }

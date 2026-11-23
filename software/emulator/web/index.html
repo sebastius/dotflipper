@@ -62,7 +62,8 @@ a { color: inherit; }
     </section>
   </div>
   <footer>Bron: <a href="https://github.com/sebastius/dotflipper">github.com/sebastius/dotflipper</a>, map
-    <code>software/emulator</code>. Instellingen blijven bewaard in je browser. De klok volgt de tijdzone van je browser.</footer>
+    <code>software/emulator</code>. Instellingen blijven bewaard in je browser. De klok volgt de tijdzone van je browser.
+    Spelletjes start je rechts onder Spelletjes; speel met de pijltjes en de spatiebalk of met een gamepad.</footer>
 </main>
 <script src="firmware.js?v=__VERSION__"></script>
 <script>
@@ -148,6 +149,12 @@ window.addEventListener('unhandledrejection', e => fail(e.reason));
   ui.srcdoc = page.replace('<head>', '<head>' + bridge);
   ui.hidden = false;
   document.getElementById('loading').remove();
+
+  // Keys pressed outside the frame go to the game controller in it, so the arrows also work
+  // when the screen has the focus
+  for (const [type, down] of [['keydown', true], ['keyup', false]]) {
+    addEventListener(type, e => { const w = ui.contentWindow; if (w && w.gamekey) w.gamekey(e, down); });
+  }
 
   const $ = id => document.getElementById(id);
   let lastStats = 0;

@@ -4,6 +4,7 @@
 #include <time.h>
 
 #include "animation.h"
+#include "game.h"
 #include "flipsettings.h"
 #include "player.h"
 #include "clockface.h"
@@ -74,6 +75,24 @@ button:hover { border-color: var(--accent); }
 #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--text); color: var(--bg);
   padding: 8px 16px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; }
 #toast.show { opacity: 1; }
+.game { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+.game + .game { border-top: 1px solid var(--line); }
+.game .players { font-size: 14px; color: var(--muted); }
+#pad { position: fixed; inset: 0; background: var(--bg); display: none; flex-direction: column; z-index: 10;
+  user-select: none; -webkit-user-select: none; touch-action: none; }
+#pad.open { display: flex; }
+#pad .bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; flex-wrap: wrap; }
+#pad .bar h1 { flex: 1; }
+#pad .controls { flex: 1; display: flex; align-items: center; justify-content: space-around; gap: 24px; padding: 16px; }
+.dpad { display: grid; grid-template-columns: repeat(3, 72px); grid-template-rows: repeat(3, 72px); gap: 6px; }
+.dpad button, .ab button { font-size: 26px; border-radius: 14px; background: var(--card); padding: 0; touch-action: none; }
+.dpad button.down, .ab button.down { background: var(--accent); color: var(--accent-text); }
+.dpad .u { grid-column: 2; } .dpad .l { grid-row: 2; grid-column: 1; }
+.dpad .r { grid-row: 2; grid-column: 3; } .dpad .d { grid-row: 3; grid-column: 2; }
+.ab { display: flex; gap: 16px; align-items: center; }
+.ab button { width: 84px; height: 84px; border-radius: 50%; font-weight: 700; }
+.ab .b { margin-top: 64px; }
+#pad .keys { color: var(--muted); font-size: 13px; padding: 0 16px 16px; text-align: center; }
 </style>
 </head>
 <body>
@@ -137,6 +156,13 @@ button:hover { border-color: var(--accent); }
   </section>
 
   <section class="card">
+    <h2>Spelletjes</h2>
+    <div id="games"></div>
+    <p class="hint">Besturen met de knoppen op het scherm, het toetsenbord of een gamepad aan je computer.
+      Na anderhalve minuut zonder knop gaat de flipdot terug naar de klok.</p>
+  </section>
+
+  <section class="card">
     <h2>Animaties</h2>
     <div class="buttons">
       <button id="allOn">Alles aan</button>
@@ -146,6 +172,28 @@ button:hover { border-color: var(--accent); }
   </section>
 </main>
 <div id="toast"></div>
+<div id="pad">
+  <div class="bar">
+    <h1 id="padTitle">Spel</h1>
+    <div class="segments" id="seat"></div>
+    <button id="restart">Opnieuw</button>
+    <button id="stop">✕ Stoppen</button>
+  </div>
+  <div class="controls">
+    <div class="dpad">
+      <button class="u" data-b="1" aria-label="Omhoog">▲</button>
+      <button class="l" data-b="4" aria-label="Links">◀</button>
+      <button class="r" data-b="8" aria-label="Rechts">▶</button>
+      <button class="d" data-b="2" aria-label="Omlaag">▼</button>
+    </div>
+    <div class="ab">
+      <button class="b" data-b="32">B</button>
+      <button class="a" data-b="16">A</button>
+    </div>
+  </div>
+  <p class="keys">Toetsenbord: pijltjes, A = spatie of X, B = Z. Een tweede speler: WASD, A = F, B = G.
+    Een gamepad aan je computer is de volgende speler. Druk op een knop om te beginnen.</p>
+</div>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -173,7 +221,7 @@ function showStatus(state) {
   if (state.status === 'fault') text = 'Storing: noodstop, herstart nodig';
   else if (state.status === 'off') text = 'Uit';
   else if (state.status === 'clock') text = 'Klok';
-  else text = (catalog.find(a => a.id === state.status) || { name: state.status }).name;
+  else text = (catalog.find(a => a.id === state.status) || games.find(g => g.id === state.status) || { name: state.status }).name;
   if (state.time && state.status !== 'off') text += ' · ' + state.time.slice(0, 5);
   $('#status').textContent = text;
 }
@@ -295,13 +343,167 @@ function render() {
   updateClockVisibility();
 }
 
+// Games: the controller sends the buttons of every player to /api/input when they change.
+// held: buttons down now, pressed: buttons that went down since the last message (a short tap
+// between two messages still counts).
+let games = [], seat = 0, playing = null;
+const touchHeld = [0, 0, 0, 0], keyHeld = [0, 0, 0, 0], padHeld = [0, 0, 0, 0];
+const heldNow = [0, 0, 0, 0], pressedSince = [0, 0, 0, 0], lastSent = [0, 0, 0, 0];
+let sending = false;
+
+function buttonsChanged() {
+  for (let p = 0; p < 4; p++) {
+    const held = touchHeld[p] | keyHeld[p] | padHeld[p];
+    pressedSince[p] |= held & ~heldNow[p];
+    heldNow[p] = held;
+  }
+  sendInput();
+}
+
+async function sendInput() {
+  if (sending) return;  // One message at a time; what changed meanwhile goes when this one is done
+  sending = true;
+  try {
+    for (let again = true; again;) {
+      again = false;
+      for (let p = 0; p < 4; p++) {
+        const d = pressedSince[p], b = heldNow[p];
+        if (!d && b === lastSent[p]) continue;
+        pressedSince[p] = 0;
+        lastSent[p] = b;
+        await fetch(`/api/input?p=${p}&b=${b}&d=${d}`, { method: 'POST' });
+        again = true;
+      }
+    }
+  } catch (e) {}
+  sending = false;
+}
+
+const keymap = {
+  ArrowUp: [0, 1], ArrowDown: [0, 2], ArrowLeft: [0, 4], ArrowRight: [0, 8], ' ': [0, 16], x: [0, 16], z: [0, 32],
+  w: [1, 1], s: [1, 2], a: [1, 4], d: [1, 8], f: [1, 16], g: [1, 32],
+};
+window.gamekey = (e, down) => {
+  if (!playing) return false;
+  const k = keymap[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+  if (!k) return false;
+  e.preventDefault();
+  if (e.repeat) return true;
+  const p = (seat + k[0]) % 4;
+  keyHeld[p] = down ? keyHeld[p] | k[1] : keyHeld[p] & ~k[1];
+  buttonsChanged();
+  return true;
+};
+addEventListener('keydown', e => gamekey(e, true));
+addEventListener('keyup', e => gamekey(e, false));
+
+function pollPads() {
+  if (!playing) return;
+  padHeld.fill(0);
+  const pads = navigator.getGamepads ? [...navigator.getGamepads()].filter(p => p) : [];
+  pads.forEach((pad, i) => {
+    const b = n => pad.buttons[n] && pad.buttons[n].pressed;
+    const ax = pad.axes[0] || 0, ay = pad.axes[1] || 0;
+    let held = 0;
+    if (b(12) || ay < -0.5) held |= 1;
+    if (b(13) || ay > 0.5) held |= 2;
+    if (b(14) || ax < -0.5) held |= 4;
+    if (b(15) || ax > 0.5) held |= 8;
+    if (b(0) || b(3) || b(9)) held |= 16;
+    if (b(1) || b(2)) held |= 32;
+    padHeld[(seat + i + 1) % 4] |= held;  // The keyboard has this seat, the pads the next ones
+  });
+  buttonsChanged();
+  requestAnimationFrame(pollPads);
+}
+
+document.querySelectorAll('#pad button[data-b]').forEach(button => {
+  const bit = +button.dataset.b;
+  const press = down => e => {
+    e.preventDefault();
+    button.classList.toggle('down', down);
+    touchHeld[seat] = down ? touchHeld[seat] | bit : touchHeld[seat] & ~bit;
+    buttonsChanged();
+  };
+  button.addEventListener('pointerdown', e => { button.setPointerCapture(e.pointerId); press(true)(e); });
+  button.addEventListener('pointerup', press(false));
+  button.addEventListener('pointercancel', press(false));
+  button.addEventListener('contextmenu', e => e.preventDefault());
+});
+
+function renderSeats(players) {
+  const box = $('#seat');
+  box.innerHTML = '';
+  if (players < 2) return;
+  for (let p = 0; p < players; p++) {
+    const label = document.createElement('label');
+    label.innerHTML = `<input type="radio" name="seat" value="${p}">Speler ${p + 1}`;
+    const radio = label.querySelector('input');
+    radio.checked = p === seat;
+    radio.onchange = () => { releaseAll(); seat = p; };
+    box.appendChild(label);
+  }
+}
+
+function releaseAll() {
+  for (const list of [touchHeld, keyHeld, padHeld]) list.fill(0);
+  document.querySelectorAll('#pad button.down').forEach(b => b.classList.remove('down'));
+  buttonsChanged();
+}
+
+async function startGame(g) {
+  try {
+    showStatus(await api('/api/game?id=' + encodeURIComponent(g.id), {}));
+  } catch (e) {
+    toast('Lukt niet');
+    return;
+  }
+  playing = g;
+  if (seat >= g.players) seat = 0;
+  $('#padTitle').textContent = g.name;
+  renderSeats(g.players);
+  $('#pad').classList.add('open');
+  requestAnimationFrame(pollPads);
+}
+
+function closePad() {
+  releaseAll();
+  playing = null;
+  $('#pad').classList.remove('open');
+}
+
+$('#restart').onclick = () => playing && startGame(playing);
+$('#stop').onclick = async () => {
+  closePad();
+  try { showStatus(await api('/api/game?id=', {})); } catch (e) {}
+};
+
+function renderGames() {
+  const list = $('#games');
+  list.innerHTML = '';
+  for (const g of games) {
+    const row = document.createElement('div');
+    row.className = 'game';
+    row.innerHTML = '<span class="grow"><span class="name"></span> <span class="players"></span></span><button>▶ Spelen</button>';
+    row.querySelector('.name').textContent = g.name;
+    row.querySelector('.players').textContent = g.players > 1 ? `1–${g.players} spelers` : '1 speler';
+    row.querySelector('button').onclick = () => startGame(g);
+    list.appendChild(row);
+  }
+}
+
 api('/api/state').then(state => {
   catalog = state.catalog;
   settings = state.settings;
   fonts = state.clock_fonts || [];
+  games = state.games || [];
   render();
+  renderGames();
   showStatus(state);
-  setInterval(() => api('/api/state').then(showStatus).catch(() => {}), 3000);
+  setInterval(() => api('/api/state').then(s => {
+    showStatus(s);
+    if (playing && s.status !== playing.id) closePad();  // Nobody played for a while
+  }).catch(() => {}), 3000);
 }).catch(() => $('#status').textContent = 'Geen verbinding');
 </script>
 </body>
@@ -362,6 +564,14 @@ static void sendstate() {
     a["name"] = animations[i]->name;
   }
 
+  JsonArray gamelist = doc["games"].to<JsonArray>();
+  for (uint8_t i = 0; i < GAME_COUNT; i++) {
+    JsonObject g = gamelist.add<JsonObject>();
+    g["id"] = games[i]->id;
+    g["name"] = games[i]->name;
+    g["players"] = games[i]->players;
+  }
+
   String json;
   serializeJson(doc, json);
   server.send(200, "application/json", json);
@@ -389,6 +599,29 @@ static void handleplay() {
   sendstate();
 }
 
+// A game: ?id=snake starts it, an empty id stops it
+static void handlegame() {
+  String id = server.arg("id");
+  if (id.length() == 0) {
+    playerstop();
+    sendstate();
+    return;
+  }
+  int8_t index = findgame(id.c_str());
+  if (index < 0) {
+    server.send(404, "application/json", "{\"error\":\"unknown game\"}");
+    return;
+  }
+  playergame(index);
+  sendstate();
+}
+
+// Buttons of one player: ?p=0..3&b=held&d=pressed since the last message. Kept short, it comes often
+static void handleinput() {
+  gameinput(server.arg("p").toInt(), server.arg("b").toInt(), server.arg("d").toInt());
+  server.send(200, "application/json", "{}");
+}
+
 void webuisetup() {
   server.on("/", HTTP_GET, []() {
     server.send_P(200, "text/html", page);
@@ -396,6 +629,8 @@ void webuisetup() {
   server.on("/api/state", HTTP_GET, sendstate);
   server.on("/api/settings", HTTP_POST, handlesettings);
   server.on("/api/play", HTTP_POST, handleplay);
+  server.on("/api/game", HTTP_POST, handlegame);
+  server.on("/api/input", HTTP_POST, handleinput);
   server.onNotFound([]() {
     server.send(404, "text/plain", "Not found");
   });
