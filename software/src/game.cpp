@@ -7,10 +7,22 @@
 
 const Game *const games[GAME_COUNT] = {
   &snakeGame,
-  &tronGame,
-  &pongGame,
-  &breakoutGame,
-  &tetrisGame,
+  &trailsGame,
+  &tennisGame,
+  &tennis4Game,
+  &wallGame,
+  &blocksGame,
+  &invadersGame,
+  &rocksGame,
+  &landerGame,
+  &flutterGame,
+  &runnerGame,
+  &crossingGame,
+  &doublingGame,
+  &lampsGame,
+  &drawGame,
+  &lifeGame,
+  &etchGame,
 };
 
 int8_t findgame(const char *id) {
@@ -43,9 +55,11 @@ static const Game *game;
 static GameState state;
 static unsigned long nextframe, statesince;
 static int32_t finalscore;
+static bool showbest;
 static int32_t best[GAME_COUNT];
 static uint8_t gameindex;
 uint16_t gameframetime;
+bool gamepaper[COLS][ROWS];
 
 static void clearpresses() {
   for (uint8_t p = 0; p < GAME_PLAYERS; p++) {
@@ -101,12 +115,72 @@ bool gamehuman(uint8_t player) {
 
 static void begin() {
   ClearScreen();
+  memset(gamepaper, 0, sizeof(gamepaper));
   gameframetime = game->frametime;
   game->setup();
   fullupdate();
   clearpresses();
-  state = WAITING;
+  state = game->waits ? WAITING : RUNNING;
   statesince = millis();
+  nextframe = statesince;
+}
+
+void gametouch(int16_t x, int16_t y, bool on) {
+  if (game && game->touch && state != FROZEN && x >= 0 && x < COLS && y >= 0 && y < ROWS) {
+    game->touch(x, y, on);
+    if (state == WAITING) {
+      state = RUNNING;
+      nextframe = millis();
+    }
+  }
+  lastinput = millis();
+}
+
+#define CURSOR_DELAY  8  // Steps before a held button repeats
+#define CURSOR_REPEAT 1
+
+static void cursormove(GameCursor &c, uint8_t buttons) {
+  if (buttons & BUTTON_LEFT) c.x--;
+  if (buttons & BUTTON_RIGHT) c.x++;
+  if (buttons & BUTTON_UP) c.y--;
+  if (buttons & BUTTON_DOWN) c.y++;
+  c.x = constrain(c.x, 0, COLS - 1);
+  c.y = constrain(c.y, 0, ROWS - 1);
+}
+
+void cursorpress(GameCursor &c, uint8_t button) {
+  if (button & BUTTONS_DIRECTION) {
+    cursormove(c, button);
+    c.wait = CURSOR_DELAY;
+  }
+}
+
+void cursorheld(GameCursor &c, uint8_t held) {
+  if (!(held & BUTTONS_DIRECTION)) {
+    c.wait = CURSOR_DELAY;
+  } else if (c.wait > 0) {
+    c.wait--;
+  } else {
+    cursormove(c, held);
+    c.wait = CURSOR_REPEAT;
+  }
+}
+
+void gamecircle(int16_t cx, int16_t cy, int16_t r, bool on) {
+  int16_t x = r, y = 0, err = 1 - r;
+  while (x >= y) {
+    setdot(cx + x, cy + y, on); setdot(cx - x, cy + y, on);
+    setdot(cx + x, cy - y, on); setdot(cx - x, cy - y, on);
+    setdot(cx + y, cy + x, on); setdot(cx - y, cy + x, on);
+    setdot(cx + y, cy - x, on); setdot(cx - y, cy - x, on);
+    y++;
+    if (err < 0) {
+      err += 2 * y + 1;
+    } else {
+      x--;
+      err += 2 * (y - x) + 1;
+    }
+  }
 }
 
 void gamestart(uint8_t index) {
@@ -123,8 +197,9 @@ const Game *gamecurrent() {
   return game;
 }
 
-void gameover(int32_t score) {
+void gameover(int32_t score, bool best) {
   finalscore = score;
+  showbest = best;
   state = FROZEN;
   statesince = millis();
 }
@@ -154,7 +229,7 @@ void gamedigits(int32_t number, int16_t x, int16_t y, uint8_t scale, bool right)
   }
 }
 
-static int16_t digitswidth(int32_t number, uint8_t scale) {
+int16_t gamedigitswidth(int32_t number, uint8_t scale) {
   char text[12];
   snprintf(text, sizeof(text), "%ld", (long)number);
   return strlen(text) * 4 * scale - scale;
@@ -163,28 +238,33 @@ static int16_t digitswidth(int32_t number, uint8_t scale) {
 static void showscore() {
   memset(next_state, 0, sizeof(next_state));
   if (finalscore >= 0) {
-    if (finalscore > best[gameindex]) {
+    if (showbest && finalscore > best[gameindex]) {
       best[gameindex] = finalscore;
     }
     uint8_t scale = ROWS >= 64 ? 4 : 2;
-    while (scale > 1 && digitswidth(finalscore, scale) > COLS - 2) {
+    while (scale > 1 && gamedigitswidth(finalscore, scale) > COLS - 2) {
       scale--;
     }
     int16_t top = ROWS / 2 - 5 * scale / 2 - 4;
-    gamedigits(finalscore, (COLS - digitswidth(finalscore, scale)) / 2, top, scale, false);
+    gamedigits(finalscore, (COLS - gamedigitswidth(finalscore, scale)) / 2, top, scale, false);
 
     // The best score this game since the start, small, under a line
+    if (!showbest) {
+      fullupdate();
+      return;
+    }
     uint8_t small = ROWS >= 64 ? 2 : 1;
     int16_t line = top + 5 * scale + 3;
     drawline(COLS / 2 - 4, line, COLS / 2 + 3, line, true);
-    gamedigits(best[gameindex], (COLS - digitswidth(best[gameindex], small)) / 2, line + 3, small, false);
+    gamedigits(best[gameindex], (COLS - gamedigitswidth(best[gameindex], small)) / 2, line + 3, small, false);
   }
   fullupdate();
 }
 
 bool gameloop() {
   unsigned long now = millis();
-  if (now - lastinput > (state == SCORE ? GAME_OVER_SECONDS : GAME_IDLE_SECONDS) * 1000UL) {
+  uint16_t idle = state == SCORE ? GAME_OVER_SECONDS : game->waits ? GAME_IDLE_SECONDS : DRAW_IDLE_SECONDS;
+  if (now - lastinput > idle * 1000UL) {
     game = nullptr;
     return false;
   }

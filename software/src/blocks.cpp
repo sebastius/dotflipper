@@ -4,7 +4,7 @@
 #include "display.h"
 #include "game.h"
 
-// Tetris: a well of 10 wide, the next piece and the number of lines on the right.
+// Falling blocks: a well of 10 wide, the next piece and the number of lines on the right.
 // Left and right move (hold to repeat), up or A turns clockwise, B turns back, down drops faster.
 // Every 10 lines it gets faster. Score: lines.
 
@@ -134,7 +134,7 @@ static void draw() {
   gamedigits(lines, COLS - 1, TET_TOP + 1 + 4 * TET_PREVIEW + 2, TET_CELL > 1 ? 2 : 1, true);
 }
 
-static void tetrissetup() {
+static void blockssetup() {
   memset(well, 0, sizeof(well));
   memset(full, 0, sizeof(full));
   lines = 0;
@@ -197,7 +197,7 @@ static void removelines() {
   }
 }
 
-static void tetrisstep() {
+static void blocksstep() {
   if (flashing) {
     while (gamepress(0)) {}
     if (--flashing == 0) {
@@ -245,4 +245,4 @@ static void tetrisstep() {
   draw();
 }
 
-const Game tetrisGame = { "tetris", "Tetris", 1, tetrissetup, tetrisstep, 30 };
+const Game blocksGame = { "blocks", "Blokken", 1, blockssetup, blocksstep, 30, nullptr, true };

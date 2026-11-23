@@ -4,7 +4,7 @@
 #include "display.h"
 #include "game.h"
 
-// Breakout: keep the ball up with the bat and knock out the bricks. Three balls, shown top left.
+// Wall breaker: keep the ball up with the bat and knock out the bricks. Three balls, shown top left.
 // A cleared wall comes back, the ball a bit faster. Score: bricks knocked out.
 
 #define BRICK_W     (COLS / 8)             // A brick and the gap next to it
@@ -59,7 +59,7 @@ static void draw() {
   }
 }
 
-static void breakoutsetup() {
+static void wallsetup() {
   newwall();
   score = walls = 0;
   balls = BALLS;
@@ -103,7 +103,7 @@ static void launch() {
   vy = -cosf(angle) * speed;
 }
 
-static void breakoutstep() {
+static void wallstep() {
   // The bat
   float batspeed = ROWS >= 64 ? 2.0f : 1.0f;
   uint8_t pressed = 0;
@@ -169,4 +169,4 @@ static void breakoutstep() {
   draw();
 }
 
-const Game breakoutGame = { "breakout", "Breakout", 1, breakoutsetup, breakoutstep, 30 };
+const Game wallGame = { "wall", "Muurbreker", 1, wallsetup, wallstep, 30, nullptr, true };

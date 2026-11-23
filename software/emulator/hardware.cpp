@@ -347,6 +347,11 @@ int main(int argc, char **argv) {
       snprintf(query, sizeof(query), "p=%d&b=%d&d=%d", rand() % 4, rand() % 2 ? button : 0, button);
       emurequest("POST", "/api/input", query, "");
     }
+    if (game && rand() % 8 == 0) {  // A tap on the phone, for the games that take them
+      char query[64];
+      snprintf(query, sizeof(query), "v=%d&c=%d,%d;%d,%d", rand() % 2, rand() % COLS, rand() % ROWS, rand() % COLS, rand() % ROWS);
+      emurequest("POST", "/api/touch", query, "");
+    }
   }
   for (int y = 0; y < ROWS; y++) {
     for (int x = 0; x < COLS; x++) putchar(emudot(x, y) ? '#' : '.');

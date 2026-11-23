@@ -62,10 +62,21 @@
 //    metaballs.cpp  outlines of melting blobs
 //    game.*         games: buttons per player from the web interface, start, game over and score
 //    snake.cpp      Snake
-//    tron.cpp       light cycles against each other or the computer
-//    pong.cpp       Pong
-//    breakout.cpp   Breakout
-//    tetris.cpp     Tetris
+//    trails.cpp     light cycles against each other or the computer
+//    tennis.cpp     table tennis for two, tennis4.cpp for four
+//    wall.cpp       bat, ball and a wall of bricks
+//    blocks.cpp     falling blocks
+//    invaders.cpp   a marching block of aliens
+//    rocks.cpp      a ship among drifting rocks
+//    lander.cpp     moon lander
+//    flutter.cpp    a bird between pipes
+//    runner.cpp     jumping over posts
+//    crossing.cpp   crossing a road and a river
+//    doubling.cpp   sliding tiles that double
+//    lamps.cpp      switch all lamps off
+//    draw.cpp       drawing board
+//    lifebox.cpp    Game of Life sandbox
+//    etch.cpp       a pen that always draws
 //    wifisetup.*    WiFiManager and OTA updates
 //    udpdisplay.*   show framebuffers received over UDP (NETWORK)
 //

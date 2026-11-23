@@ -124,4 +124,4 @@ static void snakestep() {
   }
 }
 
-const Game snakeGame = { "snake", "Snake", 1, snakesetup, snakestep, 160 };
+const Game snakeGame = { "snake", "Snake", 1, snakesetup, snakestep, 160, nullptr, true };

@@ -4,16 +4,16 @@
 #include "display.h"
 #include "game.h"
 
-// Light cycles: every rider leaves a wall behind. Whoever hits a wall or the edge is out and their
+// Trails: every rider leaves a wall behind. Whoever hits a wall or the edge is out and their
 // wall disappears; the last one riding wins. With one colour the riders are told apart by their
 // wall: rider 1 draws a solid line, the others dotted and dashed lines. The gaps are only for the
 // eye, they are as solid as the rest. Riders without a person on the controller are the computer.
 // Score: how far player 1 got.
 
-#define TRON_RIDERS ((COLS >= 64 && ROWS >= 64) ? 4 : 2)
-#define TRON_FAST   35     // Fastest frame time in ms
-#define TRON_SPEEDUP 25    // Steps between speeding up by 1 ms
-#define TRON_REACH  400    // How far the computer looks into the free space
+#define TRAILS_RIDERS ((COLS >= 64 && ROWS >= 64) ? 4 : 2)
+#define TRAILS_FAST   35     // Fastest frame time in ms
+#define TRAILS_SPEEDUP 25    // Steps between speeding up by 1 ms
+#define TRAILS_REACH  400    // How far the computer looks into the free space
 
 struct Rider {
   int16_t x, y;
@@ -22,7 +22,7 @@ struct Rider {
   uint16_t steps;
 };
 
-static Rider riders[TRON_RIDERS];
+static Rider riders[TRAILS_RIDERS];
 static uint8_t owner[COLS][ROWS];  // 0 free, else rider + 1
 static uint16_t stepcount;
 
@@ -46,22 +46,22 @@ static void start(uint8_t r, int16_t x, int16_t y, int8_t dx, int8_t dy) {
   setdot(x, y, true);
 }
 
-static void tronsetup() {
+static void trailssetup() {
   memset(owner, 0, sizeof(owner));
   start(0, COLS / 8, ROWS * 3 / 8, 1, 0);
   start(1, COLS * 7 / 8 - 1, ROWS * 5 / 8, -1, 0);
-  if (TRON_RIDERS > 2) {
+  if (TRAILS_RIDERS > 2) {
     start(2, COLS * 5 / 8, ROWS / 8, 0, 1);
     start(3, COLS * 3 / 8, ROWS * 7 / 8 - 1, 0, -1);
   }
   stepcount = 0;
 }
 
-// Free cells reachable from (x, y), up to TRON_REACH
+// Free cells reachable from (x, y), up to TRAILS_REACH
 static uint16_t space(int16_t x, int16_t y) {
-  static uint16_t seen[COLS][ROWS];
-  static uint16_t stamp;
-  static uint16_t queue[TRON_REACH];
+  static uint8_t seen[COLS][ROWS];  // Visited in this search when equal to stamp
+  static uint8_t stamp;
+  static uint16_t queue[TRAILS_REACH];
   if (++stamp == 0) {
     memset(seen, 0, sizeof(seen));
     stamp = 1;
@@ -69,11 +69,11 @@ static uint16_t space(int16_t x, int16_t y) {
   uint16_t head = 0, tail = 0;
   queue[tail++] = x * ROWS + y;
   seen[x][y] = stamp;
-  while (head < tail && tail < TRON_REACH) {
+  while (head < tail && tail < TRAILS_REACH) {
     int16_t cx = queue[head] / ROWS, cy = queue[head] % ROWS;
     head++;
     static const int8_t d[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
-    for (uint8_t i = 0; i < 4 && tail < TRON_REACH; i++) {
+    for (uint8_t i = 0; i < 4 && tail < TRAILS_REACH; i++) {
       int16_t nx = cx + d[i][0], ny = cy + d[i][1];
       if (isfree(nx, ny) && seen[nx][ny] != stamp) {
         seen[nx][ny] = stamp;
@@ -98,7 +98,7 @@ static void think(uint8_t r) {
     if (o == 0) {
       score += 4;
     }
-    for (uint8_t other = 0; other < TRON_RIDERS; other++) {
+    for (uint8_t other = 0; other < TRAILS_RIDERS; other++) {
       if (other != r && riders[other].alive && abs(riders[other].x - nx) + abs(riders[other].y - ny) == 1) {
         score -= 40;  // It could go there too
       }
@@ -136,11 +136,11 @@ static void crash(uint8_t r) {
   }
 }
 
-static void tronstep() {
-  int16_t nx[TRON_RIDERS], ny[TRON_RIDERS];
-  bool hit[TRON_RIDERS] = { false };
+static void trailsstep() {
+  int16_t nx[TRAILS_RIDERS], ny[TRAILS_RIDERS];
+  bool hit[TRAILS_RIDERS] = { false };
 
-  for (uint8_t r = 0; r < TRON_RIDERS; r++) {
+  for (uint8_t r = 0; r < TRAILS_RIDERS; r++) {
     if (!riders[r].alive) {
       continue;
     }
@@ -153,15 +153,15 @@ static void tronstep() {
     ny[r] = riders[r].y + riders[r].dy;
     hit[r] = !isfree(nx[r], ny[r]);
   }
-  for (uint8_t a = 0; a < TRON_RIDERS; a++) {  // Head on
-    for (uint8_t b = a + 1; b < TRON_RIDERS; b++) {
+  for (uint8_t a = 0; a < TRAILS_RIDERS; a++) {  // Head on
+    for (uint8_t b = a + 1; b < TRAILS_RIDERS; b++) {
       if (riders[a].alive && riders[b].alive && nx[a] == nx[b] && ny[a] == ny[b]) {
         hit[a] = hit[b] = true;
       }
     }
   }
 
-  for (uint8_t r = 0; r < TRON_RIDERS; r++) {
+  for (uint8_t r = 0; r < TRAILS_RIDERS; r++) {
     Rider &me = riders[r];
     if (!me.alive) {
       continue;
@@ -179,7 +179,7 @@ static void tronstep() {
   }
 
   uint8_t alive = 0, humans = 0;
-  for (uint8_t r = 0; r < TRON_RIDERS; r++) {
+  for (uint8_t r = 0; r < TRAILS_RIDERS; r++) {
     if (riders[r].alive) {
       alive++;
       humans += gamehuman(r);
@@ -190,9 +190,9 @@ static void tronstep() {
     return;
   }
 
-  if (++stepcount % TRON_SPEEDUP == 0 && gameframetime > TRON_FAST) {
+  if (++stepcount % TRAILS_SPEEDUP == 0 && gameframetime > TRAILS_FAST) {
     gameframetime--;
   }
 }
 
-const Game tronGame = { "tron", "Tron", TRON_RIDERS, tronsetup, tronstep, ROWS >= 64 ? 70 : 100 };
+const Game trailsGame = { "trails", "Sporen", TRAILS_RIDERS, trailssetup, trailsstep, ROWS >= 64 ? 70 : 100, nullptr, true };

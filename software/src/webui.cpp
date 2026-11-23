@@ -5,6 +5,7 @@
 
 #include "animation.h"
 #include "game.h"
+#include "display.h"
 #include "flipsettings.h"
 #include "player.h"
 #include "clockface.h"
@@ -92,6 +93,10 @@ button:hover { border-color: var(--accent); }
 .ab { display: flex; gap: 16px; align-items: center; }
 .ab button { width: 84px; height: 84px; border-radius: 50%; font-weight: 700; }
 .ab .b { margin-top: 64px; }
+#touch { display: none; align-self: center; touch-action: none; border-radius: 10px; background: #1b1b1a;
+  width: min(92vw, 52vh); height: auto; margin: 0 16px; cursor: crosshair; }
+#pad.touch #touch { display: block; }
+#pad.touch .controls { flex: none; }
 #pad .keys { color: var(--muted); font-size: 13px; padding: 0 16px 16px; text-align: center; }
 </style>
 </head>
@@ -179,6 +184,7 @@ button:hover { border-color: var(--accent); }
     <button id="restart">Opnieuw</button>
     <button id="stop">✕ Stoppen</button>
   </div>
+  <canvas id="touch" width="640" height="640" aria-label="Tik of teken op het scherm"></canvas>
   <div class="controls">
     <div class="dpad">
       <button class="u" data-b="1" aria-label="Omhoog">▲</button>
@@ -431,6 +437,107 @@ document.querySelectorAll('#pad button[data-b]').forEach(button => {
   button.addEventListener('contextmenu', e => e.preventDefault());
 });
 
+// Games that take taps: the screen of the flipdot as a canvas, tap or draw with a finger.
+// A stroke sets every dot it passes to the opposite of the first dot it touched.
+let screen = null, screenCols = 0, screenRows = 0, strokeValue = true, lastCell = null;
+const touchQueue = [];
+let touchSending = false;
+
+function drawScreen() {
+  const c = $('#touch'), ctx = c.getContext('2d');
+  if (!screen) return;
+  const cell = c.width / screenCols;
+  c.height = Math.round(cell * screenRows);
+  ctx.fillStyle = '#1b1b1a';
+  ctx.fillRect(0, 0, c.width, c.height);
+  for (let y = 0; y < screenRows; y++) {
+    for (let x = 0; x < screenCols; x++) {
+      ctx.fillStyle = screen[y * screenCols + x] ? '#f2c12e' : '#2f2f2c';
+      ctx.beginPath();
+      ctx.arc((x + 0.5) * cell, (y + 0.5) * cell, cell * 0.42, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+  }
+}
+
+async function pollScreen() {
+  if (!playing || !playing.touch) return;
+  try {
+    const s = await api('/api/screen');
+    if (!touchQueue.length && !touchSending) {  // Don't undo dots that are still on their way
+      screenCols = s.cols;
+      screenRows = s.rows;
+      const digits = Math.ceil(s.cols / 4);
+      screen = new Uint8Array(s.cols * s.rows);
+      for (let y = 0; y < s.rows; y++) {
+        for (let x = 0; x < s.cols; x++) {
+          const nibble = parseInt(s.dots[y * digits + (x >> 2)], 16);
+          screen[y * s.cols + x] = (nibble >> (3 - (x & 3))) & 1;
+        }
+      }
+      drawScreen();
+    }
+  } catch (e) {}
+  setTimeout(pollScreen, 400);
+}
+
+async function sendTouches() {
+  if (touchSending) return;
+  touchSending = true;
+  try {
+    while (touchQueue.length) {
+      const batch = touchQueue.splice(0, 40);
+      const v = batch[0][2];
+      const same = batch.filter(t => t[2] === v);
+      touchQueue.unshift(...batch.slice(same.length));
+      await fetch(`/api/touch?v=${v ? 1 : 0}&c=` + same.map(t => t[0] + ',' + t[1]).join(';'), { method: 'POST' });
+    }
+  } catch (e) {}
+  touchSending = false;
+}
+
+function touchCell(e) {
+  const c = $('#touch'), r = c.getBoundingClientRect();
+  const x = Math.floor((e.clientX - r.left) / r.width * screenCols);
+  const y = Math.floor((e.clientY - r.top) / r.height * screenRows);
+  return x >= 0 && x < screenCols && y >= 0 && y < screenRows ? [x, y] : null;
+}
+
+function touchAt(x, y) {
+  if (screen) screen[y * screenCols + x] = strokeValue ? 1 : 0;
+  touchQueue.push([x, y, strokeValue]);
+}
+
+{
+  const c = $('#touch');
+  c.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    const p = touchCell(e);
+    if (!p || !screen) return;
+    c.setPointerCapture(e.pointerId);
+    strokeValue = !screen[p[1] * screenCols + p[0]];
+    lastCell = p;
+    touchAt(p[0], p[1]);
+    drawScreen();
+    sendTouches();
+  });
+  c.addEventListener('pointermove', e => {
+    if (!lastCell) return;
+    const p = touchCell(e);
+    if (!p || (p[0] === lastCell[0] && p[1] === lastCell[1])) return;
+    let [x, y] = lastCell;  // Every cell on the way, also when the finger is fast
+    while (x !== p[0] || y !== p[1]) {
+      x += Math.sign(p[0] - x);
+      y += Math.sign(p[1] - y);
+      touchAt(x, y);
+    }
+    lastCell = p;
+    drawScreen();
+    sendTouches();
+  });
+  for (const type of ['pointerup', 'pointercancel']) c.addEventListener(type, () => lastCell = null);
+}
+
 function renderSeats(players) {
   const box = $('#seat');
   box.innerHTML = '';
@@ -463,7 +570,10 @@ async function startGame(g) {
   $('#padTitle').textContent = g.name;
   renderSeats(g.players);
   $('#pad').classList.add('open');
+  $('#pad').classList.toggle('touch', !!g.touch);
   requestAnimationFrame(pollPads);
+  screen = null;
+  if (g.touch) pollScreen();
 }
 
 function closePad() {
@@ -570,6 +680,7 @@ static void sendstate() {
     g["id"] = games[i]->id;
     g["name"] = games[i]->name;
     g["players"] = games[i]->players;
+    g["touch"] = games[i]->touch != nullptr;
   }
 
   String json;
@@ -616,6 +727,43 @@ static void handlegame() {
   sendstate();
 }
 
+// Taps on the screen of the phone: ?v=1 (on) or 0 and c=x,y;x,y;...
+static void handletouch() {
+  bool on = server.arg("v") == "1";
+  String list = server.arg("c");
+  const char *p = list.c_str();
+  while (*p) {
+    char *end;
+    long x = strtol(p, &end, 10);
+    if (*end != ',') break;
+    long y = strtol(end + 1, &end, 10);
+    gametouch(x, y, on);
+    if (*end != ';') break;
+    p = end + 1;
+  }
+  server.send(200, "application/json", "{}");
+}
+
+// What the dots show now: per row the dots as hex digits, 4 dots per digit, the first dot in the high bit
+static void handlescreen() {
+  static const char hex[] = "0123456789abcdef";
+  static char json[64 + ROWS * ((COLS + 3) / 4)];
+  int n = snprintf(json, sizeof(json), "{\"cols\":%d,\"rows\":%d,\"dots\":\"", COLS, ROWS);
+  for (int16_t y = 0; y < ROWS; y++) {
+    for (int16_t x = 0; x < COLS; x += 4) {
+      uint8_t nibble = 0;
+      for (int16_t i = 0; i < 4; i++) {
+        nibble = nibble << 1 | (x + i < COLS && current_state[x + i][y]);
+      }
+      json[n++] = hex[nibble];
+    }
+  }
+  json[n++] = '"';
+  json[n++] = '}';
+  json[n] = 0;
+  server.send(200, "application/json", json);
+}
+
 // Buttons of one player: ?p=0..3&b=held&d=pressed since the last message. Kept short, it comes often
 static void handleinput() {
   gameinput(server.arg("p").toInt(), server.arg("b").toInt(), server.arg("d").toInt());
@@ -631,6 +779,8 @@ void webuisetup() {
   server.on("/api/play", HTTP_POST, handleplay);
   server.on("/api/game", HTTP_POST, handlegame);
   server.on("/api/input", HTTP_POST, handleinput);
+  server.on("/api/touch", HTTP_POST, handletouch);
+  server.on("/api/screen", HTTP_GET, handlescreen);
   server.onNotFound([]() {
     server.send(404, "text/plain", "Not found");
   });
