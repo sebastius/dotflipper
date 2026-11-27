@@ -77,13 +77,21 @@ static inline void IRAM_ATTR waitcycles(uint32_t cycles) {
   }
 }
 
+static inline void IRAM_ATTR waituntil(uint32_t start, uint32_t cycles) {
+  while (chaincycles() - start < cycles) {
+  }
+}
+
 // One bit into the chain: the 595s take it on the rising edge, the flip-flop to the next board
-// on the falling edge
+// on the falling edge. The waits count from the start of the bit: a GPIO write itself takes about
+// 250 ns on the ESP32-S3 (measured), so waiting a half clock after each write would add that time
+// twice. Every phase still lasts at least a half clock, never faster than CHAIN_CLOCK.
 static inline void IRAM_ATTR clockbit(bool bit, uint32_t half) {
+  uint32_t start = chaincycles();
   setdata(bit);
-  waitcycles(half);
+  waituntil(start, half);
   setsclk(true);
-  waitcycles(half);
+  waituntil(start, 2 * half);
   setsclk(false);
 }
 
