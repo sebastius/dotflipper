@@ -47,7 +47,11 @@
 
 // Length of the coil pulse. It sets the peak current: 20 V over 20 ohm would end up above what
 // the drivers can take, only a short pulse keeps the current down.
+#ifdef HARDWARE_V3
+#define PULSE_MICROS       200  // At 20 V 224 flipped only part of the dots, 250 all; trying 200 at 24 V (2026-11-27)
+#else
 #define PULSE_MICROS       224
+#endif
 #define PULSE_LIMIT_MICROS 350  // Emergency stop when a pulse takes longer, one retry of an off write fits
 
 // Network

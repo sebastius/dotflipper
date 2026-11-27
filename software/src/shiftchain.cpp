@@ -29,6 +29,12 @@ static const uint32_t zeros[CHAIN_WORDS] = { 0 };
 static rmt_channel_handle_t pulsechannel;
 static rmt_encoder_handle_t pulseencoder;
 static rmt_symbol_word_t pulsesymbol;
+static volatile bool pulsedone = true;  // Set by the RMT interrupt when a pulse and its rest are over
+
+static bool IRAM_ATTR pulsefinished(rmt_channel_handle_t, const rmt_tx_done_event_data_t *, void *) {
+  pulsedone = true;
+  return false;  // No task to wake
+}
 
 static bool pulsebegin(uint16_t on, uint16_t rest) {
   rmt_tx_channel_config_t channel = {};
@@ -45,8 +51,11 @@ static bool pulsebegin(uint16_t on, uint16_t rest) {
   pulsesymbol.duration0 = on;
   pulsesymbol.level1 = 0;
   pulsesymbol.duration1 = rest;
+  rmt_tx_event_callbacks_t callbacks = {};
+  callbacks.on_trans_done = pulsefinished;
   return rmt_new_tx_channel(&channel, &pulsechannel) == ESP_OK &&
          rmt_new_copy_encoder(&encoder, &pulseencoder) == ESP_OK &&
+         rmt_tx_register_event_callbacks(pulsechannel, &callbacks, nullptr) == ESP_OK &&
          rmt_enable(pulsechannel) == ESP_OK;
 }
 
@@ -54,11 +63,18 @@ static bool pulsestart() {
   rmt_transmit_config_t config = {};
   config.loop_count = 0;
   config.flags.eot_level = 0;  // nOE high after the symbol, also if the CPU never comes back
-  return rmt_transmit(pulsechannel, pulseencoder, &pulsesymbol, sizeof(pulsesymbol), &config) == ESP_OK;
+  pulsedone = false;
+  if (rmt_transmit(pulsechannel, pulseencoder, &pulsesymbol, sizeof(pulsesymbol), &config) != ESP_OK) {
+    pulsedone = true;
+    return false;
+  }
+  return true;
 }
 
+// Only the flag from the interrupt: asking the driver (rmt_tx_wait_all_done with timeout 0) while a
+// pulse runs logs an error every time, and that spam hung the ESP at 200 us pulses (2026-11-27)
 static bool pulsebusy() {
-  return pulsechannel && rmt_tx_wait_all_done(pulsechannel, 0) != ESP_OK;
+  return pulsechannel && !pulsedone;
 }
 
 // Takes nOE back from the RMT and holds it high

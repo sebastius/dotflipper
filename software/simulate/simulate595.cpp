@@ -406,7 +406,7 @@ int main() {
     fullupdate();
     flipdot(1, 1, 1);
     printf("  langste puls voordat de firmware nOE terugpakt: %.0f us\n", pulselongest / (double)MHZ);
-    check("Die puls duurt niet langer dan 250 us", pulselongest / (double)MHZ < 250, &failures);
+    check("Die puls duurt niet langer dan PULSE_MICROS + 25 us", pulselongest / (double)MHZ < PULSE_MICROS + 25, &failures);
     check("Noodstop: nOE terug en hoog, alles uit, er flipt daarna niets meer", chainfault && alloff() && coilcount == after, &failures);
   }
 

@@ -764,6 +764,19 @@ static void handlescreen() {
   server.send(200, "application/json", json);
 }
 
+// Hardware test: n times (1-20) the whole screen black, then yellow, 0.3 s apart. Then the schedule again
+static void handlefullscreentest() {
+  int n = constrain(server.arg("n").toInt(), 1, 20);
+  for (int i = 0; i < n && !driverfault(); i++) {
+    ClearScreen();
+    delay(300);
+    YellowScreen();
+    delay(300);
+  }
+  playerreload();
+  sendstate();
+}
+
 // Buttons of one player: ?p=0..3&b=held&d=pressed since the last message. Kept short, it comes often
 static void handleinput() {
   gameinput(server.arg("p").toInt(), server.arg("b").toInt(), server.arg("d").toInt());
@@ -781,6 +794,7 @@ void webuisetup() {
   server.on("/api/input", HTTP_POST, handleinput);
   server.on("/api/touch", HTTP_POST, handletouch);
   server.on("/api/screen", HTTP_GET, handlescreen);
+  server.on("/api/test/fullscreen", HTTP_POST, handlefullscreentest);
   server.onNotFound([]() {
     server.send(404, "text/plain", "Not found");
   });
