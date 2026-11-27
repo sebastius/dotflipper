@@ -21,6 +21,8 @@ body { margin: 0; background: var(--bg); color: var(--text);
 main { max-width: 1240px; margin: 0 auto; padding: 16px; }
 h1 { font-size: 22px; margin: 0 0 4px; }
 .lead { color: var(--muted); margin: 0 0 16px; max-width: 70ch; }
+.sizes { margin: 0 0 8px; font-size: 14px; }
+.sizes a.current { font-weight: 600; text-decoration: none; }
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 560px); gap: 16px; align-items: start; }
 @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
@@ -42,8 +44,9 @@ a { color: inherit; }
 <body>
 <main>
   <h1>Flipdot-emulator</h1>
-  <p class="lead">De firmware voor de v3-borden, gecompileerd naar WebAssembly, op een model van acht borden
-    met panelen van 32×16: samen 64×64 dots. Elke dot flipt pas als de 595-keten, de latch, DIR en nOE hem
+  <p class="sizes"><a href="?" id="size64">64×64, acht panelen</a> · <a href="?size=32" id="size32">32×32, twee panelen</a></p>
+  <p class="lead">De firmware voor de v3-borden, gecompileerd naar WebAssembly, op een model van <span id="boards">acht borden</span>
+    met panelen van 32×16: samen <span id="dotcount">64×64</span> dots. Elke dot flipt pas als de 595-keten, de latch, DIR en nOE hem
     echt een puls geven. Rechts staat de webinterface van de firmware zelf.</p>
   <div class="layout">
     <section class="card">
@@ -65,7 +68,12 @@ a { color: inherit; }
     <code>software/emulator</code>. Instellingen blijven bewaard in je browser. De klok volgt de tijdzone van je browser.
     Spelletjes start je rechts onder Spelletjes; speel met de pijltjes en de spatiebalk of met een gamepad.</footer>
 </main>
-<script src="firmware.js?v=__VERSION__"></script>
+<script>
+// ?size=32 loads the build for two panels (32x32), else the one for eight (64x64)
+const small = new URLSearchParams(location.search).get('size') === '32';
+const firmwareFile = small ? 'firmware32' : 'firmware';
+document.write('<script src="' + firmwareFile + '.js?v=__VERSION__"><\/script>');
+</script>
 <script>
 // Shows why the emulator stopped, instead of loading forever
 let stopped = false;
@@ -88,12 +96,16 @@ window.addEventListener('error', e => fail(e.error || e.message));
 window.addEventListener('unhandledrejection', e => fail(e.reason));
 
 (async () => {
-  if (typeof Firmware !== 'function') throw new Error('firmware.js is niet geladen');
+  if (typeof Firmware !== 'function') throw new Error(firmwareFile + '.js is niet geladen');
   // The version keeps the browser from mixing a cached firmware.js with a newer firmware.wasm
   const fw = await Firmware({ locateFile: path => path + '?v=__VERSION__', onAbort: fail });
   const call = (name, ret, types, args) => fw.ccall(name, ret, types, args);
 
   const cols = call('emucols', 'number'), rows = call('emurows', 'number');
+  document.getElementById(small ? 'size32' : 'size64').classList.add('current');
+  document.getElementById('boards').textContent = cols * rows / 512 === 8 ? 'acht borden' : (cols * rows / 512) + ' borden';
+  document.getElementById('dotcount').textContent = cols + '×' + rows;
+  document.getElementById('dots').setAttribute('aria-label', `Flipdot-scherm van ${cols} bij ${rows} dots`);
   const canvas = document.getElementById('dots');
   const ctx = canvas.getContext('2d');
   const panelGap = 6, cell = 9.5;

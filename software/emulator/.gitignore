@@ -1,4 +1,6 @@
 # Build output: the workflow builds these for GitHub Pages
 web/firmware.js
 web/firmware.wasm
+web/firmware32.js
+web/firmware32.wasm
 native

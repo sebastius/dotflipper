@@ -1,7 +1,8 @@
 # Emulator
 
 The firmware for the v3 boards, compiled to WebAssembly and running on a model of eight boards with
-32x16 panels (64x64 dots). Live: https://sebastius.github.io/dotflipper/
+32x16 panels (64x64 dots), or of two boards (32x32, as the first v3 flipdot) with `?size=32`.
+Live: https://sebastius.github.io/dotflipper/ and https://sebastius.github.io/dotflipper/?size=32
 
 - The real code runs: `shiftchain.cpp` and `display595.cpp` drive the chain, the player, clock,
   animations and web interface are the same as on the ESP32-S3. Only WiFi, OTA and the network are left out.
@@ -16,7 +17,8 @@ The firmware for the v3 boards, compiled to WebAssembly and running on a model o
 
 Build:
 
-- `./build.sh` needs `emcc` from [emsdk](https://emscripten.org) 3.1.74 and writes `web/firmware.js` and `.wasm`.
+- `./build.sh` needs `emcc` from [emsdk](https://emscripten.org) 3.1.74 and writes `web/firmware.js` (64x64)
+  and `web/firmware32.js` (32x32) with their `.wasm`.
   Serve `web/` with any web server, for example `python3 -m http.server -d web`.
 - `./build.sh native` makes a test program for this PC: `./native 30 maze` runs 30 virtual seconds,
   plays the maze and prints the screen; `./native 60 game:tetris` plays a game with random buttons.
