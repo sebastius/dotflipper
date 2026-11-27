@@ -784,9 +784,9 @@ static void handlefullscreentest() {
 #ifdef HARDWARE_V3
 // Test: flips dot (x, y) to color c (1 yellow, 0 black) and returns the coil current during the pulse
 static void handlecurrenttest() {
-  static uint16_t us[200], mv[200];
+  static uint16_t us[60], mv[60];  // 60 samples of 12 us: 720 us from the start of the current
   uint16_t baseline = 0;
-  uint16_t n = measureflip(server.arg("x").toInt(), server.arg("y").toInt(), server.arg("c") != "0", us, mv, 200, &baseline);
+  uint16_t n = measureflip(server.arg("x").toInt(), server.arg("y").toInt(), server.arg("c") != "0", us, mv, 60, &baseline);
   JsonDocument doc;
   doc["pulse_us"] = server.arg("c") != "0" ? PULSE_MICROS_YELLOW : PULSE_MICROS_BLACK;
   doc["baseline_mv"] = baseline;

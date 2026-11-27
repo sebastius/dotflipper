@@ -43,37 +43,110 @@ void flipdot(uint16_t x, uint16_t y, bool color) {
   chainclear();
 }
 
-// Flips one dot and reads the coil current on IO4 as often as the ADC can, from the start of the pulse
-// until 150 us after its end. The INA180 gives 5 V per A over the 0.1 ohm shunt, R6/R7 make that
-// 3.33 V per A on IO4. Returns the number of samples; baseline: IO4 before the pulse, in mV.
+// Flips one dot and records the coil current on IO4 with the ADC in continuous mode: a sample every
+// 12 us (83333 Hz, the fastest of the S3) by DMA, while the CPU starts the pulse. The INA180 gives 5 V per A
+// over the 0.1 ohm shunt, R6/R7 make that 3.33 V per A on IO4. Returns the number of samples written:
+// from just before the current starts to rise, us relative to the first of those. baseline: IO4 in mV
+// before the pulse. Not for the simulation: there is no ADC there.
+#ifndef SIMULATE
+#include <esp_adc/adc_continuous.h>
+#include <esp_adc/adc_cali.h>
+#include <esp_adc/adc_cali_scheme.h>
+
+#define ADC_RATE 83333
+
 uint16_t measureflip(uint16_t x, uint16_t y, bool color, uint16_t *us, uint16_t *mv, uint16_t max, uint16_t *baseline) {
   if (chainfault) {
     return 0;
   }
   x %= COLS;
   y %= ROWS;
-  uint32_t sum = 0;
-  for (uint8_t i = 0; i < 8; i++) {
-    sum += analogReadMilliVolts(CHAIN_PIN_CURRENT);
-  }
-  *baseline = sum / 8;
 
-  uint32_t pattern[CHAIN_WORDS] = { 0 };
-  addot(pattern, x, y);
-  if (!chainpulse(pattern, color)) {
+  adc_continuous_handle_t adc = nullptr;
+  adc_continuous_handle_cfg_t handleconfig = {};
+  handleconfig.max_store_buf_size = 4096;  // 1024 samples: 12 ms
+  handleconfig.conv_frame_size = 256;
+  adc_digi_pattern_config_t pattern = {};
+  pattern.atten = ADC_ATTEN_DB_12;
+  pattern.channel = ADC_CHANNEL_3;  // GPIO4
+  pattern.unit = ADC_UNIT_1;
+  pattern.bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
+  adc_continuous_config_t config = {};
+  config.pattern_num = 1;
+  config.adc_pattern = &pattern;
+  config.sample_freq_hz = ADC_RATE;
+  config.conv_mode = ADC_CONV_SINGLE_UNIT_1;
+  config.format = ADC_DIGI_OUTPUT_FORMAT_TYPE2;
+  adc_cali_handle_t cali = nullptr;
+  adc_cali_curve_fitting_config_t caliconfig = {};
+  caliconfig.unit_id = ADC_UNIT_1;
+  caliconfig.chan = ADC_CHANNEL_3;
+  caliconfig.atten = ADC_ATTEN_DB_12;
+  caliconfig.bitwidth = ADC_BITWIDTH_12;
+  if (adc_continuous_new_handle(&handleconfig, &adc) != ESP_OK || adc_continuous_config(adc, &config) != ESP_OK ||
+      adc_cali_create_scheme_curve_fitting(&caliconfig, &cali) != ESP_OK || adc_continuous_start(adc) != ESP_OK) {
+    if (adc) adc_continuous_deinit(adc);
+    if (cali) adc_cali_delete_scheme_curve_fitting(cali);
     return 0;
   }
-  uint32_t start = micros();  // The pulse started during chainpulse(), at most some us before this
-  uint16_t n = 0;
-  while (n < max && micros() - start < PULSE_MICROS + 150) {
-    us[n] = micros() - start;
-    mv[n] = analogReadMilliVolts(CHAIN_PIN_CURRENT);
-    n++;
-  }
+
+  // 2 ms before, the pulse, 2 ms after: about 350 samples, well within the 1024 of the buffer
+  delay(2);
+  uint32_t pattern595[CHAIN_WORDS] = { 0 };
+  addot(pattern595, x, y);
+  bool pulsed = chainpulse(pattern595, color);
+  delayMicroseconds(2000);
   chainclear();
+
+  // Read while it still runs: the driver only hands out data in the running state
+  static uint16_t raw[1024];
+  uint16_t count = 0;
+  uint8_t buffer[256];
+  uint32_t got = 0;
+  while (count < 1024 && adc_continuous_read(adc, buffer, sizeof(buffer), &got, 0) == ESP_OK) {
+    for (uint32_t i = 0; i + SOC_ADC_DIGI_RESULT_BYTES <= got && count < 1024; i += SOC_ADC_DIGI_RESULT_BYTES) {
+      adc_digi_output_data_t *d = (adc_digi_output_data_t *)&buffer[i];
+      if (d->type2.channel == ADC_CHANNEL_3) raw[count++] = d->type2.data;
+    }
+  }
+  adc_continuous_stop(adc);
+  adc_continuous_deinit(adc);
+
+  // Baseline from the first 100 samples (the 2 ms before the pulse), then from 3 samples before the rise
+  uint32_t sum = 0;
+  uint16_t first = min<uint16_t>(100, count);
+  for (uint16_t i = 0; i < first; i++) {
+    int v = 0;
+    adc_cali_raw_to_voltage(cali, raw[i], &v);
+    sum += v;
+  }
+  *baseline = first ? sum / first : 0;
+  int16_t rise = -1;
+  for (uint16_t i = first; i < count && rise < 0; i++) {
+    int v = 0;
+    adc_cali_raw_to_voltage(cali, raw[i], &v);
+    if (v > *baseline + 30) rise = i;  // 30 mV: about 9 mA
+  }
+  uint16_t n = 0;
+  if (pulsed && rise >= 0) {
+    uint16_t from = rise >= 3 ? rise - 3 : 0;
+    for (uint16_t i = from; i < count && n < max; i++, n++) {
+      int v = 0;
+      adc_cali_raw_to_voltage(cali, raw[i], &v);
+      us[n] = (uint32_t)(i - from) * 1000000UL / ADC_RATE;
+      mv[n] = v;
+    }
+  }
+  adc_cali_delete_scheme_curve_fitting(cali);
   current_state[x][y] = next_state[x][y] = color;
   return n;
 }
+#else
+uint16_t measureflip(uint16_t, uint16_t, bool, uint16_t *, uint16_t *, uint16_t, uint16_t *baseline) {
+  *baseline = 0;
+  return 0;
+}
+#endif
 
 // Flips every changed dot from current_state to next_state.
 void fullupdate() {
