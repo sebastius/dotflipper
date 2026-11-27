@@ -51,8 +51,10 @@
 #define PULSE_LIMIT_MICROS 350  // Emergency stop when a pulse takes longer, one retry of an off write fits
 
 // Network
+#ifndef HOSTNAME                             // The v3 envs set their own, so v1 and v3 can share a network
 #define HOSTNAME            "flipdot"
-#define WIFI_AP_NAME        "flipdot-setup"  // Access point name of the WiFiManager config portal
+#endif
+#define WIFI_AP_NAME        HOSTNAME "-setup"  // Access point name of the WiFiManager config portal
 #define WIFI_PORTAL_TIMEOUT 180              // in seconds, reboot when nobody configured WiFi
 #define OTA_PASSWORD        "admin"
 #define UDP_PORT            1337
