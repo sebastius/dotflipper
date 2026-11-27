@@ -26,6 +26,8 @@ inline void pinMode(int, int) {}
 inline void delay(unsigned long) {}
 inline void yield() {}
 inline unsigned long millis() { return 0; }
+inline unsigned long micros() { return 0; }
+inline uint32_t analogReadMilliVolts(int) { return 0; }  // No coil current in the model
 void delayMicroseconds(unsigned int us);
 
 struct FakeSerial {

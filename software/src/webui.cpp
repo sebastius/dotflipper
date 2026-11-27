@@ -781,6 +781,31 @@ static void handlefullscreentest() {
   sendstate();
 }
 
+#ifdef HARDWARE_V3
+// Test: flips dot (x, y) to color c (1 yellow, 0 black) and returns the coil current during the pulse
+static void handlecurrenttest() {
+  static uint16_t us[200], mv[200];
+  uint16_t baseline = 0;
+  uint16_t n = measureflip(server.arg("x").toInt(), server.arg("y").toInt(), server.arg("c") != "0", us, mv, 200, &baseline);
+  JsonDocument doc;
+  doc["pulse_us"] = server.arg("c") != "0" ? PULSE_MICROS_YELLOW : PULSE_MICROS_BLACK;
+  doc["baseline_mv"] = baseline;
+  JsonArray samples = doc["samples"].to<JsonArray>();
+  int peak = 0;
+  for (uint16_t i = 0; i < n; i++) {
+    int ma = ((int)mv[i] - baseline) * 3 / 10;  // 3.33 V per A on IO4
+    peak = max(peak, ma);
+    JsonArray sample = samples.add<JsonArray>();
+    sample.add(us[i]);
+    sample.add(ma);
+  }
+  doc["peak_ma"] = peak;
+  String json;
+  serializeJson(doc, json);
+  server.send(200, "application/json", json);
+}
+#endif
+
 // Buttons of one player: ?p=0..3&b=held&d=pressed since the last message. Kept short, it comes often
 static void handleinput() {
   gameinput(server.arg("p").toInt(), server.arg("b").toInt(), server.arg("d").toInt());
@@ -799,6 +824,9 @@ void webuisetup() {
   server.on("/api/touch", HTTP_POST, handletouch);
   server.on("/api/screen", HTTP_GET, handlescreen);
   server.on("/api/test/fullscreen", HTTP_POST, handlefullscreentest);
+#ifdef HARDWARE_V3
+  server.on("/api/test/current", HTTP_POST, handlecurrenttest);
+#endif
   server.onNotFound([]() {
     server.send(404, "text/plain", "Not found");
   });

@@ -63,6 +63,7 @@ void configTzTime(const char *tz, const char *server1, const char *server2 = nul
 // Pins: the chain pins are in hardware.cpp, everything else reads high (no button pressed)
 inline void pinMode(int, int) {}
 inline int digitalRead(int) { return HIGH; }
+inline uint32_t analogReadMilliVolts(int) { return 0; }  // No coil current in the emulator
 inline void digitalWrite(int, int) {}
 
 // Random, the same as on the ESP32: random(max) and random(min, max), max exclusive

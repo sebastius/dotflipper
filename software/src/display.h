@@ -28,3 +28,8 @@ void ClearScreen();
 void YellowScreen();
 void pixelwalker();
 void showpicture(const boolean picture[32][32]);
+
+#ifdef HARDWARE_V3
+// Test: flips one dot while sampling the coil current on IO4, see display595.cpp
+uint16_t measureflip(uint16_t x, uint16_t y, bool color, uint16_t *us, uint16_t *mv, uint16_t max, uint16_t *baseline);
+#endif

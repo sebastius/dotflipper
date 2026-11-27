@@ -43,6 +43,38 @@ void flipdot(uint16_t x, uint16_t y, bool color) {
   chainclear();
 }
 
+// Flips one dot and reads the coil current on IO4 as often as the ADC can, from the start of the pulse
+// until 150 us after its end. The INA180 gives 5 V per A over the 0.1 ohm shunt, R6/R7 make that
+// 3.33 V per A on IO4. Returns the number of samples; baseline: IO4 before the pulse, in mV.
+uint16_t measureflip(uint16_t x, uint16_t y, bool color, uint16_t *us, uint16_t *mv, uint16_t max, uint16_t *baseline) {
+  if (chainfault) {
+    return 0;
+  }
+  x %= COLS;
+  y %= ROWS;
+  uint32_t sum = 0;
+  for (uint8_t i = 0; i < 8; i++) {
+    sum += analogReadMilliVolts(CHAIN_PIN_CURRENT);
+  }
+  *baseline = sum / 8;
+
+  uint32_t pattern[CHAIN_WORDS] = { 0 };
+  addot(pattern, x, y);
+  if (!chainpulse(pattern, color)) {
+    return 0;
+  }
+  uint32_t start = micros();  // The pulse started during chainpulse(), at most some us before this
+  uint16_t n = 0;
+  while (n < max && micros() - start < PULSE_MICROS + 150) {
+    us[n] = micros() - start;
+    mv[n] = analogReadMilliVolts(CHAIN_PIN_CURRENT);
+    n++;
+  }
+  chainclear();
+  current_state[x][y] = next_state[x][y] = color;
+  return n;
+}
+
 // Flips every changed dot from current_state to next_state.
 void fullupdate() {
   // Per board the dots still to flip, as local x * 16 + y
