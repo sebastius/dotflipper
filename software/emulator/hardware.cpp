@@ -130,8 +130,12 @@ static void rmtupdate() {
 
 bool pulsebegin(uint16_t on, uint16_t rest) { rmtowned = true; rmton = on; rmtrest = rest; return true; }
 
+// The driver call takes time before nOE really goes low: measured 42 us on the first call (code not
+// in the cache yet) and about 13 us after that. The model starts the pulse at the end of the call.
+static bool rmtfirstcall = true;
 bool pulsestart() {
-  cycles += 4;
+  cycles += (uint64_t)(rmtfirstcall ? 60 : 15) * 240;
+  rmtfirstcall = false;
   rmtupdate();
   if (!rmtowned) return false;
   if (rmtactive) rule5++;  // A pulse on top of a running one

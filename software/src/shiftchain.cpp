@@ -234,12 +234,15 @@ bool chainpulse(const uint32_t pattern[CHAIN_WORDS], bool color) {
   latch();
   setdirx1(!color);
   setdirrow(color);
-  pulsestarted = chaincycles();
   pulsing = true;
   if (!pulsestart()) {
     chainstop();
     return false;
   }
+  // Only now: the driver call can take tens of us before nOE goes low (42 us measured on the first
+  // call). The pulse started during the call, so it ends before PULSE_LIMIT_MICROS_V3 from here; a
+  // stuck RMT is stopped at most that call time later.
+  pulsestarted = chaincycles();
   chainstats.pulses++;
   return true;
 }
