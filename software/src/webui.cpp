@@ -767,15 +767,23 @@ static void handlescreen() {
 }
 
 // Hardware test: n times (1-20) the whole screen yellow, then black, w ms apart (default 300, at most
-// 10000). Then the schedule again. The web server waits meanwhile.
+// 10000). With p=checker&s=2 a checkerboard of s x s blocks and its inverse instead. Then the schedule
+// again. The web server waits meanwhile.
 static void handlefullscreentest() {
   int n = constrain(server.arg("n").toInt(), 1, 20);
   int w = server.hasArg("w") ? constrain(server.arg("w").toInt(), 0, 10000) : 300;
+  bool checker = server.arg("p") == "checker";
+  int size = server.hasArg("s") ? constrain(server.arg("s").toInt(), 1, 16) : 2;
   for (int i = 0; i < n && !driverfault(); i++) {
-    YellowScreen();
-    delay(w);
-    ClearScreen();
-    delay(w);
+    for (bool phase : { true, false }) {
+      for (int x = 0; x < COLS; x++) {
+        for (int y = 0; y < ROWS; y++) {
+          next_state[x][y] = checker ? (((x / size + y / size) % 2 == 0) == phase) : phase;
+        }
+      }
+      fullupdate();
+      delay(w);
+    }
   }
   playerreload();
   sendstate();
