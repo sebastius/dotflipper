@@ -15,6 +15,6 @@ uint32_t chaincycles();
 
 // The RMT on nOE: one pulse of on us with nOE low, then rest us high, timed by the model
 bool pulsebegin(uint16_t on, uint16_t rest);
-bool pulsestart();
+bool pulsestart(uint16_t on);  // This pulse: on us
 bool pulsebusy();
 void pulserelease();  // nOE back to the CPU, held high

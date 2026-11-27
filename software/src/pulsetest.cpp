@@ -82,9 +82,11 @@ static void report() {
     Serial.println("core 0: geen pulsen gemeten");
     return;
   }
-  Serial.printf("core 0: %u pulsen gemeten, laag %.2f tot %.2f us (doel %d), kortste rust %.2f us (minstens %d)\n", lows,
-                lowmin / 240.0, lowmax / 240.0, PULSE_MICROS, highmin == 0xFFFFFFFF ? 0 : highmin / 240.0, PULSE_GAP_MICROS);
-  bool ok = lowmin / 240.0 > PULSE_MICROS - 0.5 && lowmax / 240.0 < PULSE_MICROS + 0.5 &&
+  // The pulses alternate between the colors: every low must be one of the two lengths
+  Serial.printf("core 0: %u pulsen gemeten, laag %.2f tot %.2f us (doel %d geel, %d zwart), kortste rust %.2f us (minstens %d)\n", lows,
+                lowmin / 240.0, lowmax / 240.0, PULSE_MICROS_YELLOW, PULSE_MICROS_BLACK, highmin == 0xFFFFFFFF ? 0 : highmin / 240.0, PULSE_GAP_MICROS);
+  const double shortest = min(PULSE_MICROS_YELLOW, PULSE_MICROS_BLACK), longest = PULSE_MICROS;
+  bool ok = lowmin / 240.0 > shortest - 0.5 && lowmax / 240.0 < longest + 0.5 &&
             (highmin == 0xFFFFFFFF || highmin / 240.0 >= PULSE_GAP_MICROS - 0.5);
   Serial.println(ok ? "GOED" : "FOUT: pulsen niet zoals verwacht");
 }

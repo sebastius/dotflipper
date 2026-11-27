@@ -641,7 +641,9 @@ static void sendstate() {
   chain["boards_found"] = chainboardsfound;
   chain["fault"] = chainfault;
   chain["pulses"] = chainstats.pulses;
-  chain["pulse_us"] = PULSE_MICROS;  // Timed by the RMT
+  chain["pulse_us"] = PULSE_MICROS;  // Timed by the RMT; the longest of the two colors
+  chain["pulse_yellow_us"] = PULSE_MICROS_YELLOW;
+  chain["pulse_black_us"] = PULSE_MICROS_BLACK;
   chain["gap_us"] = PULSE_GAP_MICROS;
 #else
   uint32_t mhz = getCpuFrequencyMhz();
@@ -764,14 +766,16 @@ static void handlescreen() {
   server.send(200, "application/json", json);
 }
 
-// Hardware test: n times (1-20) the whole screen black, then yellow, 0.3 s apart. Then the schedule again
+// Hardware test: n times (1-20) the whole screen yellow, then black, w ms apart (default 300, at most
+// 10000). Then the schedule again. The web server waits meanwhile.
 static void handlefullscreentest() {
   int n = constrain(server.arg("n").toInt(), 1, 20);
+  int w = server.hasArg("w") ? constrain(server.arg("w").toInt(), 0, 10000) : 300;
   for (int i = 0; i < n && !driverfault(); i++) {
-    ClearScreen();
-    delay(300);
     YellowScreen();
-    delay(300);
+    delay(w);
+    ClearScreen();
+    delay(w);
   }
   playerreload();
   sendstate();

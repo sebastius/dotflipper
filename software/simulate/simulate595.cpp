@@ -53,6 +53,7 @@ static bool coilon[HW_MAX];
 static uint64_t coilstart[HW_MAX], lastcoilend;
 static bool anycoilended;
 static uint32_t pulseshortest = 0xFFFFFFFF, pulselongest;
+static uint32_t pulseworst;  // Largest difference with the length for its color, in cycles
 static uint32_t gapshortest = 0xFFFFFFFF;
 static long interruptat = -1;  // Pulse number that gets interrupted for a long time
 
@@ -95,6 +96,9 @@ static void updatemodel() {
       uint32_t length = cycles - coilstart[b];
       if (length < pulseshortest) pulseshortest = length;
       if (length > pulselongest) pulselongest = length;
+      uint32_t want = (pdirrow ? PULSE_MICROS_YELLOW : PULSE_MICROS_BLACK) * MHZ;  // Row to 20 V: yellow
+      uint32_t off = length > want ? length - want : want - length;
+      if (off > pulseworst) pulseworst = off;
       lastcoilend = cycles;
       anycoilended = true;
     }
@@ -128,7 +132,7 @@ bool pulsebegin(uint16_t on, uint16_t rest) {
 // The driver call takes time before nOE really goes low: measured 42 us on the first call (code not
 // in the cache yet) and about 13 us after that. The model starts the pulse at the end of the call.
 static bool rmtfirstcall = true;
-bool pulsestart() {
+bool pulsestart(uint16_t on) {
   cycles += (uint64_t)(rmtfirstcall ? 60 : 15) * MHZ;
   rmtfirstcall = false;
   rmtupdate();
@@ -138,7 +142,7 @@ bool pulsestart() {
     violation("puls gestart terwijl de vorige nog loopt");
   }
   rmtactive = rmtlow = true;
-  rmtlowend = cycles + (uint64_t)rmton * MHZ;
+  rmtlowend = cycles + (uint64_t)on * MHZ;
   rmtend = rmtlowend + (uint64_t)rmtrest * MHZ;
   pnoe = false;
   updatemodel();
@@ -328,15 +332,14 @@ int main() {
     flipdot(x, y, 1); allmatch &= alloff(); flipdot(x, y, 0); offbetween &= alloff();
   }
   printf("  %ld beelden, %u pulsen\n", frames, chainstats.pulses);
-  printf("  spoelpuls in het model: %.1f tot %.1f us, doel %d us\n", pulseshortest / (double)MHZ, pulselongest / (double)MHZ, PULSE_MICROS);
+  printf("  spoelpuls in het model: %.1f tot %.1f us, doel %d us geel, %d us zwart\n", pulseshortest / (double)MHZ, pulselongest / (double)MHZ, PULSE_MICROS_YELLOW, PULSE_MICROS_BLACK);
   printf("  kortste rust tussen pulsen: %.1f us, doel %d us\n", gapshortest / (double)MHZ, PULSE_GAP_MICROS);
   printf("  per stap (puls, rust, schuiven) gemiddeld %.0f us\n", perpulse);
   check("Regel 1: LATCH en DIR alleen met nOE hoog", !rule1, &failures);
   check("Regel 2: maximaal 1 spoel per bord", !rule2 && maxcoils == 1, &failures);
   check("Regel 3: alles uit na elke update", offbetween && alloff(), &failures);
   check("Regel 4: panelen tonen wat next_state zegt", allmatch, &failures);
-  check("Regel 5: elke puls binnen 1 us van het doel", chainstats.pulses > 0 &&
-        pulseshortest / (double)MHZ > PULSE_MICROS - 1 && pulselongest / (double)MHZ < PULSE_MICROS + 1, &failures);
+  check("Regel 5: elke puls binnen 1 us van het doel voor zijn kleur", chainstats.pulses > 0 && pulseworst < MHZ, &failures);
   check("Regel 5: genoeg rust tussen pulsen", chainstats.pulses > 0 && gapshortest / (double)MHZ >= PULSE_GAP_MICROS, &failures);
 
   printf("Borden flippen tegelijk\n");
@@ -372,12 +375,13 @@ int main() {
   start();
   pulseshortest = 0xFFFFFFFF;
   pulselongest = 0;
+  pulseworst = 0;
   interruptat = coilcount + 10;  // 500 us stil, midden in een puls
   memset(next_state, 1, sizeof(next_state));
   fullupdate();
   printf("  pulsen met 500 us stilstand: %.1f tot %.1f us\n", pulseshortest / (double)MHZ, pulselongest / (double)MHZ);
   check("500 us stilstand: puls blijft precies even lang, geen storing",
-        pulseshortest / (double)MHZ > PULSE_MICROS - 1 && pulselongest / (double)MHZ < PULSE_MICROS + 1 && !chainfault && matches(), &failures);
+        pulseworst < MHZ && !chainfault && matches(), &failures);
 
   start();
   pulselongest = 0;

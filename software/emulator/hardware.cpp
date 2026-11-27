@@ -103,7 +103,8 @@ static void updatemodel() {
       double length = (cycles - coilstart[b]) / 240.0;
       if (length < pulseshortest) pulseshortest = length;
       if (length > pulselongest) pulselongest = length;
-      if (length < PULSE_MICROS - 1 || length > PULSE_MICROS + 1) rule5++;
+      double want = pdirrow ? PULSE_MICROS_YELLOW : PULSE_MICROS_BLACK;  // Row to 20 V: yellow
+      if (length < want - 1 || length > want + 1) rule5++;
     }
     coilon[b] = on;
   }
@@ -133,14 +134,14 @@ bool pulsebegin(uint16_t on, uint16_t rest) { rmtowned = true; rmton = on; rmtre
 // The driver call takes time before nOE really goes low: measured 42 us on the first call (code not
 // in the cache yet) and about 13 us after that. The model starts the pulse at the end of the call.
 static bool rmtfirstcall = true;
-bool pulsestart() {
+bool pulsestart(uint16_t on) {
   cycles += (uint64_t)(rmtfirstcall ? 60 : 15) * 240;
   rmtfirstcall = false;
   rmtupdate();
   if (!rmtowned) return false;
   if (rmtactive) rule5++;  // A pulse on top of a running one
   rmtactive = rmtlow = true;
-  rmtlowend = cycles + (uint64_t)rmton * 240;
+  rmtlowend = cycles + (uint64_t)on * 240;
   rmtend = rmtlowend + (uint64_t)rmtrest * 240;
   pnoe = false;
   updatemodel();

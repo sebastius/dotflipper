@@ -16,6 +16,7 @@ uint32_t chaincyclesperus;
 
 static uint32_t halfclock;     // in cycles, at CHAIN_CLOCK
 static uint32_t pulsestarted;  // in cycles, when the RMT got the last pulse
+static uint16_t pulselength = PULSE_MICROS;  // in us, of the last pulse
 static bool pulsing = false;
 static const uint32_t zeros[CHAIN_WORDS] = { 0 };
 
@@ -59,7 +60,8 @@ static bool pulsebegin(uint16_t on, uint16_t rest) {
          rmt_enable(pulsechannel) == ESP_OK;
 }
 
-static bool pulsestart() {
+static bool pulsestart(uint16_t on) {
+  pulsesymbol.duration0 = on;  // The copy encoder copies the symbol during rmt_transmit()
   rmt_transmit_config_t config = {};
   config.loop_count = 0;
   config.flags.eot_level = 0;  // nOE high after the symbol, also if the CPU never comes back
@@ -123,7 +125,7 @@ static void IRAM_ATTR shiftout(const uint32_t pattern[CHAIN_WORDS]) {
 //  - nOE still low PULSE_LIMIT_MICROS after the start: the RMT doesn't end the pulse
 //  - the driver not done after PULSE_STUCK_MICROS: its interrupt can be late (a flash write holds
 //    them up), that alone is safe as long as nOE is high, so this limit is long
-#define PULSE_LIMIT_MICROS_V3 (PULSE_MICROS + 20)
+#define PULSE_LIMIT_MICROS_V3 (pulselength + 20)
 #define PULSE_STUCK_MICROS    10000
 static bool waitpulse() {
   if (!pulsing) {
@@ -251,7 +253,8 @@ bool chainpulse(const uint32_t pattern[CHAIN_WORDS], bool color) {
   setdirx1(!color);
   setdirrow(color);
   pulsing = true;
-  if (!pulsestart()) {
+  pulselength = color ? PULSE_MICROS_YELLOW : PULSE_MICROS_BLACK;
+  if (!pulsestart(pulselength)) {
     chainstop();
     return false;
   }
