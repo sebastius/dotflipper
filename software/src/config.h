@@ -48,10 +48,11 @@
 // Length of the coil pulse. It sets the peak current: 20 V over 20 ohm would end up above what
 // the drivers can take, only a short pulse keeps the current down.
 #ifdef HARDWARE_V3
-// Per color, each pulse flips one color only. At 24 V (2026-11-27): 200 flips all dots both ways,
-// 170 to black but not every dot to yellow. At 20 V 224 was too short, 250 enough.
-#define PULSE_MICROS_YELLOW 200
-#define PULSE_MICROS_BLACK  170
+// Per color, each pulse flips one color only. Found on the first panel at 24 V (2026-11-27): yellow 190
+// and black 150 flip every dot, 4 times with 5 s rest; yellow 170 did not flip every dot. At 20 V 224 was
+// too short for all dots and 250 enough. Yellow needs more than black on these panels.
+#define PULSE_MICROS_YELLOW 190
+#define PULSE_MICROS_BLACK  150
 #define PULSE_MICROS       (PULSE_MICROS_YELLOW > PULSE_MICROS_BLACK ? PULSE_MICROS_YELLOW : PULSE_MICROS_BLACK)
 #else
 #define PULSE_MICROS       224
