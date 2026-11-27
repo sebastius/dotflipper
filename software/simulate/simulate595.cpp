@@ -406,7 +406,9 @@ int main() {
     fullupdate();
     flipdot(1, 1, 1);
     printf("  langste puls voordat de firmware nOE terugpakt: %.0f us\n", pulselongest / (double)MHZ);
-    check("Die puls duurt niet langer dan PULSE_MICROS + 25 us", pulselongest / (double)MHZ < PULSE_MICROS + 25, &failures);
+    // The watch counts from after the driver call (up to 60 us in the model), so: limit + call time
+    check("Die puls stopt binnen PULSE_MICROS + 20 + 60 us, en onder PULSE_LIMIT_MICROS",
+          pulselongest / (double)MHZ < PULSE_MICROS + 20 + 60 + 2 && pulselongest / (double)MHZ < PULSE_LIMIT_MICROS, &failures);
     check("Noodstop: nOE terug en hoog, alles uit, er flipt daarna niets meer", chainfault && alloff() && coilcount == after, &failures);
   }
 
